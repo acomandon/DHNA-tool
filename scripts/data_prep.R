@@ -713,6 +713,11 @@ HUD_FMI <- data.frame(MFI_30 = (23030+27750)/2,
                       MFI_80 = (61000+67750)/2)
 
 # HUD data 
+# Unzip the data first
+HUDzip <- here("data", "prepackaged", "hud", "HUD_AFFH_2024.zip")
+outDir <- here("data", "prepackaged", "hud")
+unzip(HUDzip,exdir=outDir)
+
 # total number of subsidized units
 hud_housing <- read_csv(here("data", "prepackaged", "hud", "HUD_AFFH_2024",
                              "Housing_tract_AFFHT0007_December2024.csv")) %>% 
