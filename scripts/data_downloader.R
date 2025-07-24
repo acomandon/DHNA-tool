@@ -149,6 +149,27 @@ define_extract_nhgis(
   download_extract(download_dir = paste0(dl_path, "/ct2020"))
 
 
+# PUMS data ---------------------------------------------------------------
+
+dir.create(file.path(here("data", "pums_usa", "acs_21_23")), 
+           recursive = TRUE)
+dl_path <- here("data", "pums_usa", "acs_21_23")
+
+pums_vars <- list(var_spec("STATEFIP", case_selections = "21"), 
+                  "PUMA","COUNTYFIP", "NUMPREC","HHINCOME", 
+                  "OWNERSHP", "RENTGRS")
+
+pums_extract <- define_extract_micro(
+  collection = "usa",
+  description = "2021-2023 KY ACS data",
+  samples = c("us2021a", "us2022a", "us2023a"),
+  variables = pums_vars,
+  data_structure = "household_only") %>% 
+  submit_extract() %>%
+  wait_for_extract() %>%
+  download_extract(download_dir = dl_path) 
+
+
 # crosswalk ---------------------------------------------------------------
 dir.create(file.path(here("data", "nhgis", "crosswalks")), 
            recursive = TRUE)
