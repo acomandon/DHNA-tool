@@ -432,6 +432,8 @@ Jefferson_ma <- st_read(here("data", "prepackaged", "Market_areas", "Comp_Plan_M
   st_transform(., crs=4326) %>% 
   select(OBJECTID, Name) %>% 
   rename(market_area = Name)
+# write to tool data folder for use within the tool
+st_write(lvm_ct, here("DHNA", "data", "gis", "Comp_Plan_Market_Areas.shp"))
 # join market areas to population center layer and summarize population
 # data by market area
 Jefferson_bg_ma <- st_join(lvm_bg_popctr_geo, Jefferson_ma,

@@ -195,6 +195,8 @@ download_supplemental_data(
 
 # GIS layers --------------------------------------------------------------
 # 2023 block group geography
+dir.create(file.path(here("DHNA", "data", "gis")), 
+           recursive = TRUE)
 dir.create(file.path(here("data", "nhgis", "gis", "blockgroup", "bg2023")), 
            recursive = TRUE)
 dl_path <- here("data", "nhgis", "gis", "blockgroup")
@@ -212,6 +214,7 @@ lvm_bg <- read_ipums_sf(nhgis_2023_bg_gis) %>%
   filter(STATEFP == "21", COUNTYFP == "111") %>% 
   st_transform(ky_shp, crs=4326)
 st_write(lvm_bg, here("data", "nhgis", "gis", "blockgroup", "bg2023", "KY_Jefferson_BG_2023.shp"))
+st_write(lvm_bg, here("DHNA", "data", "gis", "KY_Jefferson_BG_2023.shp"))
 
 # 2020 block group population center
 dir.create(file.path(here("data", "nhgis", "gis", "blockgroup", "bgc2020")), 
@@ -232,7 +235,9 @@ lvm_bgc <- read_ipums_sf(nhgis_2020_bgc_gis) %>%
 st_write(lvm_bgc, here("data", "nhgis", "gis", "blockgroup", "bgc2020", "KY_Jefferson_BGC_2020.shp"))
 
 # 2020 Census Tract geography
-dl_path <- here("data", "gis", "tract")
+dir.create(file.path(here("data", "nhgis", "gis", "tract", "ct2023")), 
+           recursive = TRUE)
+dl_path <- here("data", "nhgis", "gis", "tract")
 define_extract_nhgis(
   description = "2020 Census Tract shapefiles request",
   shapefiles = "us_tract_2023_tl2023") %>%
@@ -240,9 +245,11 @@ define_extract_nhgis(
   wait_for_extract() %>%
   download_extract(download_dir = paste0(dl_path, "/ct2023"))
 # subset to Louisville only
-lvm_ct <- read_ipums_sf(here("data", "gis", "tract", "ct2023", "nhgis0271_shape.zip")) %>% 
+nhgis_2020_ct_gis <- list.files(here("data", "nhgis", "gis", "tract", "ct2023"),
+                                 full.names = TRUE)
+lvm_ct <- read_ipums_sf(nhgis_2020_ct_gis) %>% 
   filter(STATEFP == "21", COUNTYFP == "111") %>% 
   st_transform(ky_shp, crs=4326)
-st_write(lvm_ct, here("data", "gis", "tract", "ct2023", "KY_Jefferson_tract_2023.shp"))
-
+st_write(lvm_ct, here("data", "nhgis", "gis", "tract", "ct2023", "KY_Jefferson_tract_2023.shp"))
+st_write(lvm_ct, here("DHNA", "data", "gis", "KY_Jefferson_tract_2023.shp"))
 
