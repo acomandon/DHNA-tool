@@ -433,7 +433,8 @@ Jefferson_ma <- st_read(here("data", "prepackaged", "Market_areas", "Comp_Plan_M
   select(OBJECTID, Name) %>% 
   rename(market_area = Name)
 # write to tool data folder for use within the tool
-st_write(lvm_ct, here("DHNA", "data", "gis", "Comp_Plan_Market_Areas.shp"))
+st_write(Jefferson_ma, here("DHNA", "data", "gis", "Comp_Plan_Market_Areas.shp"),
+         append = FALSE)
 # join market areas to population center layer and summarize population
 # data by market area
 Jefferson_bg_ma <- st_join(lvm_bg_popctr_geo, Jefferson_ma,
@@ -461,6 +462,7 @@ Jefferson_bg_ma <- st_join(lvm_bg_popctr_geo, Jefferson_ma,
 dir.create(file.path(here("data", "processed")), 
            recursive = TRUE)
 pop_ma_s <- bind_rows(pop_s, Jefferson_bg_ma) %>% 
+  rename(GISJOIN_proj = GISJOIN) %>% 
   write_csv(., here("DHNA", "data", "pop_ethnorace.csv"))
 
 
@@ -695,11 +697,11 @@ nhood_vars20_s <- local_area %>%
 # BG buffer data ----------------------------------------------------------
 
 # rent from Renthub - change between Q3 2017 and Q3 2024
-# limiting to areas where there are at least 50 observations 
+# limiting to areas where there are at least 30 observations 
 rent_buffer <- read_csv(here("data", "prepackaged", "renthub", "rent_buffer.csv")) %>% 
   mutate(year_qu_text = paste0(R_quarter, "_", R_year)) %>% 
   filter(year_qu_text == "Q3_2017"|year_qu_text == "Q3_2024") %>% 
-  filter(N > 50) %>% 
+  filter(N > 30) %>% 
   group_by(GISJOIN) %>% 
   mutate(bg_n = n()) %>% 
   filter(bg_n == 2) %>% # make sure there is enough observations in both years
@@ -710,22 +712,20 @@ rent_buffer <- read_csv(here("data", "prepackaged", "renthub", "rent_buffer.csv"
   rename(GISJOIN_proj = GISJOIN) %>%
   select(-market_area)
 
-# rent from Renthub - Monthly change from 01/2019 to 09/2024
-# limiting to areas where there are at least 50 observations 
+# rent from Renthub - quarterly change from 01/2019 to 09/2024
+# limiting to areas where there are at least 30 observations 
+# and 20 quarters of data
 rent_buffer <- read_csv(here("data", "prepackaged", "renthub", "rent_buffer.csv")) %>% 
   mutate(year_qu_text = paste0(R_quarter, "_", R_year)) %>% 
-  filter(year_qu_text == "Q3_2017"|year_qu_text == "Q3_2024") %>% 
-  filter(N > 50) %>% 
+  filter(R_year > 2017) %>% 
+  filter(N > 30) %>% 
   group_by(GISJOIN) %>% 
   mutate(bg_n = n()) %>% 
-  filter(bg_n == 2) %>% # make sure there is enough observations in both years
-  select(-bg_n) %>% 
-  pivot_wider(id_cols = c(GISJOIN, GEOID_bg, market_area), 
-              names_from = year_qu_text, 
-              values_from = c(rent_bg,rent_ma)) %>% 
+  filter(bg_n > 20) %>% # make sure there is enough observations in both years
+  select(-bg_n)  %>% 
   rename(GISJOIN_proj = GISJOIN) %>%
   select(-market_area) %>% 
-  write_csv(., here("DHNA", "data", "Renthub_monthly_rent.csv"))
+  write_csv(., here("DHNA", "data", "Renthub_quarterly_rent.csv"))
 
 # number of permits and affordable units within 800 m of block
 # Create 800m buffer around BG population center
@@ -882,17 +882,15 @@ rent_income20_ct <- ct_data_2020 %>%
          renters_99999 = ATEVE023,
          renters_149999 = ATEVE024,
          renters_200000 = ATEVE025) %>% 
-  select(-starts_with("ATE")) %>%
-  select(-YEAR:-NAME_E, -NAME_M) %>%
+  select(starts_with("renters"), GISJOIN) %>% 
   filter(renters > 0) %>% 
   select(-renters) %>% 
-  mutate(GEOID = as.character(GEOID)) %>% 
-  pivot_longer(cols = c(-GISJOIN,-GEOID))
+  pivot_longer(cols = c(-GISJOIN))
 
 # % renters by FMI levels
 rent_fmi20_ct  <- rent_income20_ct %>% 
   group_by(GISJOIN) %>%
-  summarise(all_renters_ct = sum(value),
+  summarise(all_renters_ct = sum(value, na.rm = T),
             renters30_ct = renter_adj(name, value, HUD_FMI$MFI_30),
             renters50_ct = renter_adj(name, value, HUD_FMI$MFI_50),
             renters60_ct = renter_adj(name, value, HUD_FMI$MFI_60),
@@ -913,10 +911,11 @@ ct_data <- local_area_ct %>%
   left_join(., hud_tract, by = join_by(GEOID_CT == geoid)) %>% 
   left_join(., rent_fmi20_ct) %>% 
   group_by(GISJOIN_proj) %>% 
-  summarise(across(where(is.double), ~sum(.x, na.rm = TRUE)))
+  summarise(across(where(is.double), ~sum(.x, na.rm = TRUE))) %>% 
+  mutate(cost_burden30_20_p = cost_burden30_20_ct/burden_HH_20_ct,
+         cost_burden50_20_p = cost_burden50_20_ct/burden_HH_20_ct)
 
 # Join BG data and create rank variables for risk assessment
-
 
 # Join to BG data
 BGxCT <- bg2020 %>%
@@ -1013,6 +1012,10 @@ risk_class <- bg_ct_data %>%
 bg_ct_risk <- left_join(bg_ct_data, risk_class) %>% 
   mutate(risk_level = if_else(is.na(risk_level) == TRUE, "low", risk_level))
 
-rm(list=setdiff(ls(), c("bg2020", "bg_ct_data", "bg_ct_risk")))
+rm(list=setdiff(ls(), c("bg2020", "bg_ct_data", "bg_ct_risk", "local_area")))
+
+local_area %>% 
+  select(GISJOIN_proj, GISJOIN_CT) %>% 
+  write_csv(., here("DHNA", "data", "local_area.csv"))
 
 write_csv(bg_ct_risk, here("DHNA", "data", "LVM_Risk_Database.csv"))
