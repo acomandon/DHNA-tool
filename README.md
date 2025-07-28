@@ -28,7 +28,7 @@ computer, I recommend installing [R
 Studio](https://posit.co/download/rstudio-desktop/)
 
 You will need an IPUMS API Key. Follow the instructions
-[here](see%20https://cran.r-project.org/web/packages/ipumsr/vignettes/ipums-api.html)
+[here](https://cran.r-project.org/web/packages/ipumsr/vignettes/ipums-api.html)
 
 ### Deploying the tool
 
