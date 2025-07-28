@@ -1,0 +1,68 @@
+---
+title: "Displacement and Housing Need Assessment Tool"
+author: "Andre Comandon"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This repository enables anyone to reproduce a tool to assess the risk of 
+residential displacement and requirements for providing affordable housing
+initially developed for the 
+[Louisville Metro Government - Office of Housing and Community Development](https://louisvilleky.gov/government/community-development/office-housing-and-community-development)
+The repository includes code to download and format required data and 
+prepackaged data that is not readily available through an API. All Census
+data and geography comes from NHGIS and IPUMS USA at 
+[IPUMS](https://www.ipums.org/). You will need to create an API key for the
+tool to build successfully. 
+
+## Getting Started
+
+Clone the project locally using the green <> Code button above (Download ZIP).
+The repository is not large (~50MB), but you will need more disk space to 
+download all additional data. Altogether, the tool will use 800MB of disk space.
+
+### Prerequisites
+
+The tool runs entirely in R. If you do not have R installed on your computer,
+I recommend installing [R Studio](https://posit.co/download/rstudio-desktop/)
+
+You will need an IPUMS API Key. 
+Follow the instructions [here](see https://cran.r-project.org/web/packages/ipumsr/vignettes/ipums-api.html)
+
+### Deploying the tool
+
+Once you have downloaded and extracted the ZIP folder, open the project file
+**build_tool**. This will open R Studio. Once R Studio is open, you can navigate
+to the scripts sub-folder and open **data_prep**. 
+
+On the first run, make sure to source the data_downloader script by removing the 
+hashtags from this line: 
+
+```{source data_downloader}
+# source(here("scripts", "data_downloader.R"))
+```
+
+Once the data are downloaded, you do not need to repeat that step. You can add
+the hashtag back in front of the line to prevent it from being run.
+
+The script will download, format, create the folder structure, and output all
+the required data. 
+
+Once the script has run, you can open the tool (app.r) in the **DHNA** folder.
+In the upper right corner, you should see a **Run App** button. This will launch
+a local instance of the tool.
+
+## Collaborating
+
+I am interested in expanding the functionalities of this tool and adapting it
+for different applications. If you are interested in collaborating on improving,
+extending, or learning from this tool, please contact me. 
+
+## License
+
+This project is licensed under the [MIT License](LICENSE.md).
+
