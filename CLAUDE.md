@@ -34,8 +34,8 @@ The line `source(here("scripts", "data_downloader.R"))` near the top of `data_pr
 - **Local area** for each block group = the set of 2020 BGs in the same tract whose 2020 population centers fall within 800m of the focal BG's population center. Used for local context tables and the ethnoracial-change comparisons.
 - **Median estimation from ACS bins** uses the custom `med_lin_est()` helper (linear interpolation across the bin containing the median); `renter_adj()` does a similar interpolation to estimate renters under an FMI cutoff. Both live at the top of `data_prep.R`.
 - **Risk classification** (high/medium/low) is the `risk_class` block at the bottom of `data_prep.R` (~line 954). It's a rule-based scoring system over percentile-rank variables (rents, home values, college share, income, ethnoracial change, permits, vacancy). Changes here directly drive what users see in the app.
-- **Inflation adjustment**: `data_prep.R` and `app.R` both hard-code `CPI_13_23 = 1.3086` (BLS, July 2013 → July 2023) for comparing 2009-2013 ACS to 2019-2023 ACS dollars.
-- **Geographic scope is hard-coded to Kentucky/Jefferson County** (`STATEFP == "21"`, `COUNTYFP == "111"`, NHGIS `geographic_extents = 210`). Adapting to another locality means changing these in both scripts plus the prepackaged inputs in `data/prepackaged/`.
+- **Configuration is centralized in `R/config.R`**, sourced by all three scripts. Three blocks: `locality` (FIPS codes, county/state names, NHGIS extent, PUMA list, default map center), `vintages` (NHGIS dataset codes, PUMS samples, shapefile codes — the things you'd edit during a data refresh), and `params` (CPI factor, buffer distances, projected CRS). Adapting to another locality is a one-file change here, plus replacing the locality-specific inputs in `data/prepackaged/`. **Not yet absorbed**: the HUD_FMI table (still inline in `data_prep.R`), risk-classification thresholds (Goal #4 will overhaul), and UI AMI dollar strings.
+- **Dependencies are pinned with `renv`** (`renv.lock` at the project root). After cloning, run `renv::restore()` in R before sourcing anything.
 
 ## Required data not pulled by `data_downloader.R`
 

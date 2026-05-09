@@ -24,10 +24,13 @@ library(flextable)
 library(officer)
 library(bsicons)
 
+# CONFIG
+source("../R/config.R")
+
 
 # Fixed values
 # Inflation between July 2013 and July 2023 for ACS data (from BLS)
-CPI_13_23 = 1.3086
+CPI_13_23 <- params$cpi_prior_to_recent
 # Create container for location on map
 clicks <- data.frame(lat = NA, lng = NA, .nonce = 0.432713)
 
@@ -44,15 +47,15 @@ hh_micro <- read_csv("./data/hh_micro.csv")
 adat_data <- read_csv("./data/LVM_Risk_Database.csv") 
 
 # geography
-lvm_bg_geo <- st_read("./data/gis/KY_blck_grp_2022.shp") %>% 
-  filter(COUNTYFP == "111") %>% 
-  st_transform(lvm_bg_geo, crs=4326) %>% 
-  left_join(., pop_map, by = join_by(GISJOIN == GISJOIN_proj)) %>% 
+lvm_bg_geo <- st_read("./data/gis/KY_Jefferson_BG_2023.shp") %>%
+  filter(COUNTYFP == locality$county_fips) %>%
+  st_transform(crs=4326) %>%
+  left_join(., pop_map, by = join_by(GISJOIN == GISJOIN_proj)) %>%
   filter(pop > 0)
-lvm_ct_geo <- st_read("./data/gis/KY_Jefferson_tract_2022.shp")
-st_transform(lvm_ct_geo, crs=4326)
-lvm_ma_geo <-  st_read("./data/gis/Comp_Plan_Market_Areas.shp") %>% 
-  st_transform(lvm_ct_geo, crs=4326)
+lvm_ct_geo <- st_read("./data/gis/KY_Jefferson_tract_2023.shp") %>%
+  st_transform(crs=4326)
+lvm_ma_geo <-  st_read("./data/gis/Comp_Plan_Market_Areas.shp") %>%
+  st_transform(crs=4326)
 
 # Load image for landing page
 backgroundImageCSS <- "height: 95vh;
@@ -426,9 +429,9 @@ server <- function(input, output, session) {
   output$map <- renderLeaflet({
     leaflet() %>%
       addTiles() %>%
-      setView(lng = -85.755, 
-              lat = 38.252,
-              zoom = 12) %>% 
+      setView(lng = locality$default_map$lng,
+              lat = locality$default_map$lat,
+              zoom = locality$default_map$zoom) %>%
       addProviderTiles("Esri.WorldGrayCanvas")
   })
   
@@ -437,7 +440,7 @@ server <- function(input, output, session) {
   observeEvent(input$geocode, {
     address_single <- tibble(singlelineaddress = paste(input$address, ", ",
                                                        input$city, ", ",
-                                                       "KY, ",
+                                                       paste0(locality$state_abbr, ", "),
                                                        input$zip))
     
     census_full <- address_single %>% geocode(

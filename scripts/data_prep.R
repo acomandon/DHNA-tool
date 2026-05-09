@@ -20,6 +20,9 @@ library(ggalluvial)
 library(ggrepel)
 library(forcats)
 
+# CONFIG
+source(here("R", "config.R"))
+
 # functions
 # median linear interpolation
 med_lin_est <- function(name, value) {
@@ -361,7 +364,7 @@ ct_pop20 <- bg2020 %>%
 
 # Load layers for BG, BG population center and tract
 lvm_bg_geo <- st_read(here("data", "nhgis", "gis", "blockgroup", "bg2023", "KY_Jefferson_BG_2023.shp")) %>% 
-  st_transform(lvm_bg_geo, crs=4326) %>% 
+  st_transform(crs=4326) %>%
   left_join(., bg_pop20) %>% 
   filter(pop > 0) %>% 
   select(GISJOIN, GEOID) %>% 
@@ -369,7 +372,7 @@ lvm_bg_geo <- st_read(here("data", "nhgis", "gis", "blockgroup", "bg2023", "KY_J
          GEOID_BG = GEOID)
 
 lvm_bg_popctr_geo <- st_read(here("data", "nhgis", "gis", "blockgroup", "bgc2020", "KY_Jefferson_BGC_2020.shp")) %>% 
-  st_transform(lvm_bg_geo, crs=4326) %>% 
+  st_transform(crs=4326) %>%
   left_join(., bg_pop20) %>% 
   filter(pop > 0) %>% 
   select(GISJOIN, GEOID, pop) %>% 
@@ -384,7 +387,7 @@ bg_ct_match <- bg_pop20 %>%
 # 800m of the project BG
 local_area <- st_join(lvm_bg_geo, lvm_bg_popctr_geo, 
                       join = st_is_within_distance,
-                      dist = 800) %>% 
+                      dist = params$local_area_buffer_m) %>%
   st_drop_geometry() %>% 
   mutate(GISJOIN_CT = str_sub(GISJOIN_BG_PC, end = -2)) %>% 
   left_join(., ct_pop20) %>% 
@@ -485,7 +488,7 @@ HUD_FMI <- data.frame(YEAR = c(rep(2023,8), rep(2022,8), rep(2021,8)),
                                   29650,33900,38150,42350,45750,49150,52550,55950,
                                   26950,30800,34650,38450,41550,44650,47700,50800),
                       MFI_LI = c(50250,57400,64600,71750,77500,83250,89000,98750,
-                                 47450,542000,61000,67750,73200,78600,84050,89450,
+                                 47450,54200,61000,67750,73200,78600,84050,89450,
                                  43050,49200,55350,61500,66450,71350,76300,81200))
 
 pums_acs <- list.files(here("data", "pums_usa", "acs_21_23"),
@@ -498,7 +501,7 @@ ddi <- read_ipums_ddi(pums_acs)
 # Affordability
 # renters
 ky_h <- read_ipums_micro(ddi) %>% 
-  filter(PUMA %in% c(1701,1702,1703,1704,1705,1706),
+  filter(PUMA %in% locality$pumas,
          HHINCOME < 9999999,
          OWNERSHP == 2
   ) %>% 
@@ -655,7 +658,7 @@ med_hv10_s <- local_area %>%
 # 2020
 med_hv20_s <- local_area %>% 
   left_join(., bg2020, by = join_by(GISJOIN_comp == GISJOIN)) %>% 
-  select(GISJOIN_comp, GISJOIN_proj,, HV_10000:HV_2000000) %>% 
+  select(GISJOIN_comp, GISJOIN_proj, HV_10000:HV_2000000) %>% 
   pivot_longer(cols = c(-GISJOIN_comp, -GISJOIN_proj)) %>%
   group_by(GISJOIN_proj, name) %>% 
   summarise(value = sum(value)) %>% 
@@ -696,26 +699,26 @@ nhood_vars20_s <- local_area %>%
 
 # BG buffer data ----------------------------------------------------------
 
-# rent from Renthub - change between Q3 2017 and Q3 2024
-# limiting to areas where there are at least 30 observations 
-rent_buffer <- read_csv(here("data", "prepackaged", "renthub", "rent_buffer.csv")) %>% 
-  mutate(year_qu_text = paste0(R_quarter, "_", R_year)) %>% 
-  filter(year_qu_text == "Q3_2017"|year_qu_text == "Q3_2024") %>% 
-  filter(N > 30) %>% 
-  group_by(GISJOIN) %>% 
-  mutate(bg_n = n()) %>% 
-  filter(bg_n == 2) %>% # make sure there is enough observations in both years
-  select(-bg_n) %>% 
-  pivot_wider(id_cols = c(GISJOIN, GEOID_bg, market_area), 
-              names_from = year_qu_text, 
-              values_from = c(rent_bg,rent_ma)) %>% 
+# rent from Renthub - change between Q3 2017 and Q3 2024 (wide; feeds rank_rents2)
+# limiting to areas where there are at least 30 observations
+rent_buffer_wide <- read_csv(here("data", "prepackaged", "renthub", "rent_buffer.csv")) %>%
+  mutate(year_qu_text = paste0(R_quarter, "_", R_year)) %>%
+  filter(year_qu_text == "Q3_2017" | year_qu_text == "Q3_2024") %>%
+  filter(N > 30) %>%
+  group_by(GISJOIN) %>%
+  mutate(bg_n = n()) %>%
+  filter(bg_n == 2) %>% # require both quarters present
+  select(-bg_n) %>%
+  pivot_wider(id_cols = c(GISJOIN, GEOID_bg, market_area),
+              names_from = year_qu_text,
+              values_from = c(rent_bg, rent_ma)) %>%
   rename(GISJOIN_proj = GISJOIN) %>%
   select(-market_area)
 
-# rent from Renthub - quarterly change from 01/2019 to 09/2024
-# limiting to areas where there are at least 30 observations 
+# rent from Renthub - quarterly change from 01/2019 to 09/2024 (long; written to disk for the Shiny app)
+# limiting to areas where there are at least 30 observations
 # and 20 quarters of data
-rent_buffer <- read_csv(here("data", "prepackaged", "renthub", "rent_buffer.csv")) %>% 
+rent_buffer <- read_csv(here("data", "prepackaged", "renthub", "rent_buffer.csv")) %>%
   mutate(year_qu_text = paste0(R_quarter, "_", R_year)) %>% 
   filter(R_year > 2017) %>% 
   filter(N > 30) %>% 
@@ -733,8 +736,8 @@ lvm_bg_popctr_buffer <- lvm_bg_popctr_geo %>%
   st_transform(crs=4326) %>%
   select(GISJOIN_BG_PC) %>% 
   rename(GISJOIN_proj = GISJOIN_BG_PC) %>% 
-  st_transform(crs = 2246) %>% 
-  st_buffer(dist = 2640)
+  st_transform(crs = params$permit_buffer_crs) %>%
+  st_buffer(dist = params$permit_buffer_ft)
 # Load permit data
 build_permits <- st_read(here("data", "prepackaged", "permits", "res_permits2.shp"))
 # Summarize the number of permits
@@ -747,7 +750,7 @@ bg_permits <- st_join(lvm_bg_popctr_buffer, build_permits,
 # Load affordable unit database and transform to state plane projection
 affordable <- st_read(here("data", "prepackaged", "affordable", "affordable_housing.shp")) %>% 
   select(NHPD_Prope, Property_N, Total_Unit, EndDate_Ye)
-affordable <- st_transform(affordable, 2246)
+affordable <- st_transform(affordable, params$permit_buffer_crs)
 # Summarize the number of affordable units
 bg_ah <- st_join(lvm_bg_popctr_buffer, affordable,
                  join = st_intersects) %>% 
@@ -767,7 +770,7 @@ bg_data <- pop_change %>%
   left_join(., med_hhinc20_s) %>% 
   left_join(., nhood_vars10_s) %>% 
   left_join(., nhood_vars20_s) %>% 
-  left_join(., rent_buffer) %>% 
+  left_join(., rent_buffer_wide) %>%
   left_join(., bg_permits) %>% 
   left_join(., bg_ah) %>% 
   mutate(vacancy_Ch = (HU_vacant_20/HU_20)-
@@ -782,7 +785,7 @@ bg_data <- pop_change %>%
          renter_p_ch = renter_p_20 - renter_p_10,
          #housing_cost_burden =(rent_burden30_20_ct+own_burden30_20_ct)/HH_20_ct, 
          college_edu = (adult_college_above_20/adult_over25_20)-
-           (adult_college_above_10/adult_over25_20),
+           (adult_college_above_10/adult_over25_10),
          hi_inc_ch = (hi_inc_hh_20/HH_20)-(hi_inc_hh_10/HH_10),
          hi_inc_ch_pop = hi_inc_hh_20-hi_inc_hh_10,
          lo_inc_ch = (lo_inc_hh_20/HH_20)-(lo_inc_hh_10/HH_10),
@@ -807,16 +810,16 @@ unzip(HUDzip,exdir=outDir)
 # total number of subsidized units
 hud_housing <- read_csv(here("data", "prepackaged", "hud", "HUD_AFFH_2024",
                              "Housing_tract_AFFHT0007_December2024.csv")) %>% 
-  filter(state_name == "Kentucky",
-         county_name == "Jefferson County",
+  filter(state_name == locality$state_name,
+         county_name == locality$county_name,
          program_label == "Summary") %>% 
   select(geoid, total_units)
 # Number of households with at least one housing problem and 
 # number of households
 hud_tract <- read_csv(here("data", "prepackaged", "hud", "HUD_AFFH_2024",
                            "AFFH_tract_AFFHT0007_December2024.csv")) %>% 
-  filter(state_name == "Kentucky",
-         county_name == "Jefferson County") %>% 
+  filter(state_name == locality$state_name,
+         county_name == locality$county_name) %>% 
   select(geoid, hh_tot_1_m_hus_pb, hh_tot_husholds)
 
 nhgis_2020_ct <- list.files(here("data", "nhgis", "tract", "ct2020"),
@@ -828,8 +831,8 @@ ct_data_2020 <- left_join(ct_data_2020_A, ct_data_2020_B)
 
 # housing cost burden
 ct2020 <- ct_data_2020 %>% 
-  filter(STATE == "Kentucky",
-         COUNTY == "Jefferson County") %>%
+  filter(STATE == locality$state_name,
+         COUNTY == locality$county_name) %>%
   mutate(GEOID = str_extract(GEO_ID, "(?<=S).*")) %>%
   rename(renter_20_ct = ASWFE010,
          rent_burden30_20_ct = ASWFE011,
@@ -867,8 +870,8 @@ ct2020 <- ct_data_2020 %>%
 
 # Income by tenure  
 rent_income20_ct <- ct_data_2020 %>% 
-  filter(STATE == "Kentucky",
-         COUNTY == "Jefferson County") %>%
+  filter(STATE == locality$state_name,
+         COUNTY == locality$county_name) %>%
   mutate(GEOID = str_extract(GEO_ID, "(?<=S).*")) %>% 
   rename(renters = ATEVE014,
          renters_5000 = ATEVE015,
