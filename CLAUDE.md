@@ -8,6 +8,16 @@ This repo builds the **Displacement and Housing Need Assessment (DHNA) Tool**, a
 
 The codebase is entirely R. There is no build/lint/test tooling — workflow is "source the script in RStudio."
 
+## Active project goals
+
+Ongoing directions for the tool — keep these in mind when suggesting changes or scoping work:
+
+1. **Robustness and efficiency review** of the existing pipeline and app.
+2. **Refresh all data** to the latest available vintages (NHGIS datasets, ACS releases, PUMS samples, HUD AFFH, crosswalks, shapefiles).
+3. **Split the assessment into separate rental and ownership project modules** — currently the risk model and UI treat housing as a single category.
+4. **Update the displacement risk methodology** (the `risk_class` rule block in `data_prep.R` ~line 954). Open to methodological changes, not just parameter tweaks.
+5. **Add a commercial gentrification measure** — a new dimension alongside the residential displacement risk currently computed.
+
 ## Two-stage pipeline
 
 The repo has a strict two-stage flow. Understanding the boundary between them is essential:
