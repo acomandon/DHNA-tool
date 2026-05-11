@@ -24,8 +24,9 @@ library(flextable)
 library(officer)
 library(bsicons)
 
-# CONFIG
+# CONFIG and shared helpers
 source("../R/config.R")
+source("../R/project_recommender.R")
 
 
 # Fixed values
@@ -551,7 +552,7 @@ server <- function(input, output, session) {
       addProviderTiles("CartoDB.Positron") %>%
       addPolygons(data = local_area_ct, color = 'black', fillOpacity = .2, weight = 2) %>% 
       addPolygons(data = bg_focus, color = "black", fillOpacity = .6, weight = 2) %>% 
-      addPolygons(data = lvm_ma_geo, color = "darkred", fillOpacity = .01, weight = 2, label= ~Name) %>% 
+      addPolygons(data = lvm_ma_geo, color = "darkred", fillOpacity = .01, weight = 2, label = ~mkt_area) %>%
       addMiniMap(
         tiles = providers$Esri.WorldGrayCanvas,
         position = 'topright', 
@@ -840,235 +841,77 @@ server <- function(input, output, session) {
   
   # Matrix section ----
   
+  build_recommendation <- function() {
+    area <- adat_data %>% filter(GISJOIN_proj == bg_id())
+    recommend_project(
+      risk_level = area$risk_level,
+      project_size = input$proj_size,
+      affordable_units = list(
+        ami30 = input$affordable30, ami50 = input$affordable50,
+        ami60 = input$affordable60, ami70 = input$affordable70,
+        ami80 = input$affordable80
+      ),
+      area = area
+    )
+  }
+
   output$risk_assessment_res <- renderUI({
     req(input$submit)
-    
     validate(
-      need(input$affordable30>= 0&
-             input$affordable50>= 0&
-             input$affordable60>= 0&
-             input$affordable70>= 0&
-             input$affordable80 >= 0, "Please ensure all fields have a value,
-           even if zero")
+      need(input$affordable30 >= 0 & input$affordable50 >= 0 &
+             input$affordable60 >= 0 & input$affordable70 >= 0 &
+             input$affordable80 >= 0,
+           "Please ensure all fields have a value, even if zero")
     )
-    
-    fmi_rent <- adat_data %>% filter(GISJOIN_proj == bg_id())
-    
-    crit0 <- fmi_rent %>% 
-      select(renter_p_20,
-             renters_20) %>% 
-      mutate(renter_p_20 = round(renter_p_20*100,0))
-    
-    crit1 <- fmi_rent %>%
-      select(risk_level)
-    
-    aff_df <- data.frame(aff_level = c("30% AMI",
-                                       "50% AMI",
-                                       "60% AMI",
-                                       "70% AMI",
-                                       "80% AMI"),
-                         aff_pct = c(round(fmi_rent$renters30_ct/fmi_rent$all_renters_ct*100,0), # % below 30%
-                                     round(fmi_rent$renters50_ct/fmi_rent$all_renters_ct*100,0), # % below 50%
-                                     round(fmi_rent$renters60_ct/fmi_rent$all_renters_ct*100,0), # % below 60%
-                                     round(fmi_rent$renters70_ct/fmi_rent$all_renters_ct*100,0), # % below 70%
-                                     round(fmi_rent$renters80_ct/fmi_rent$all_renters_ct*100,0)) # % below 80%
-    )
-    
-    crit2_level <- aff_df$aff_level[min(which(aff_df$aff_pct>50))]
-    crit2_pct <- aff_df$aff_pct[min(which(aff_df$aff_pct>50))]
-    
-    crit3 <- fmi_rent %>%
-      select(cost_burden30_20_p)
-    
-    if(input$affordable30+
-       input$affordable50+
-       input$affordable60+
-       input$affordable70+
-       input$affordable80>
-       input$proj_size) {
-      paste("")
-    } 
-    else {
-      card(
-        value_box(title = "Tenure",
-                  value = paste0("There are ", 
-                                 crit0$renters_20, 
-                                 " renters making up ",
-                                 crit0$renter_p_20, 
-                                 "% of households"),
-                  showcase = bs_icon("building"),
-                  #theme = "teal",
-                  p("Renters are most at risk of displacement. High shares of renters
+
+    result <- build_recommendation()
+    if (!result$valid) return(paste(""))
+
+    ctx <- result$context
+    card(
+      value_box(title = "Tenure",
+                value = paste0("There are ", ctx$renters_20,
+                               " renters making up ", ctx$renter_p_20,
+                               "% of households"),
+                showcase = bs_icon("building"),
+                p("Renters are most at risk of displacement. High shares of renters
                   can be a sign of vulnerability")),
-        value_box(title = "Risk Level",
-                  value = crit1$risk_level,
-                  showcase = bs_icon("house-exclamation"),
-                  p("The risk level determines the criteria the project must meet")),
-        value_box(title = "Affordability",
-                  value = paste0(crit2_pct, "% of renters can afford rents up to ", crit2_level),
-                  showcase = bs_icon("shield"),
-                  p("Projects should be affordable to a majority of renters in 
-                medium and high risk areas")),
-        value_box(title = "Housing Cost Burden",
-                  value = paste0(round(crit3$cost_burden30_20_p*100,0),
-                                 "% of households are housing cost-burdened"), 
-                  showcase = bs_icon("thermometer-half"),
-                  p("The share of cost-burdened household determines how many units
-                should be affordable in medium and high risk areas"))
-      )
-    }
+      value_box(title = "Risk Level",
+                value = ctx$risk_level,
+                showcase = bs_icon("house-exclamation"),
+                p("The risk level determines the criteria the project must meet")),
+      value_box(title = "Affordability",
+                value = paste0(ctx$majority_pct_renters,
+                               "% of renters can afford rents up to ",
+                               ctx$majority_level),
+                showcase = bs_icon("shield"),
+                p("Projects should be affordable to a majority of renters in
+                  medium and high risk areas")),
+      value_box(title = "Housing Cost Burden",
+                value = paste0(ctx$cost_burden_pct,
+                               "% of households are housing cost-burdened"),
+                showcase = bs_icon("thermometer-half"),
+                p("The share of cost-burdened household determines how many units
+                  should be affordable in medium and high risk areas"))
+    )
   })
-  
+
   output$recommendation <- renderUI({
     req(input$submit)
-    
     validate(
-      need(input$affordable30>= 0&
-             input$affordable50>= 0&
-             input$affordable60>= 0&
-             input$affordable70>= 0&
+      need(input$affordable30 >= 0 & input$affordable50 >= 0 &
+             input$affordable60 >= 0 & input$affordable70 >= 0 &
              input$affordable80 >= 0, "")
     )
-    
-    fmi_rent <- adat_data %>% filter(GISJOIN_proj == bg_id())
-    
-    crit1 <- fmi_rent %>%
-      select(risk_level)
-    
-    aff_df <- data.frame(aff_level = c("30% AMI",
-                                       "50% AMI",
-                                       "60% AMI",
-                                       "70% AMI",
-                                       "80% AMI"),
-                         aff_pct = c(round(fmi_rent$renters30_ct/fmi_rent$all_renters_ct*100,0), # % below 30%
-                                     round(fmi_rent$renters50_ct/fmi_rent$all_renters_ct*100,0), # % below 50%
-                                     round(fmi_rent$renters60_ct/fmi_rent$all_renters_ct*100,0), # % below 60%
-                                     round(fmi_rent$renters70_ct/fmi_rent$all_renters_ct*100,0), # % below 70%
-                                     round(fmi_rent$renters80_ct/fmi_rent$all_renters_ct*100,0)), # % below 80%
-                         aff_proj = c(input$affordable30,
-                                      input$affordable30+input$affordable50,
-                                      input$affordable30+input$affordable50+
-                                        input$affordable60,
-                                      input$affordable30+input$affordable50+
-                                        input$affordable60+input$affordable70,
-                                      input$affordable30+input$affordable50+
-                                        input$affordable60+input$affordable70+
-                                        input$affordable80)
+
+    result <- build_recommendation()
+    if (!result$valid) return(p(result$error))
+
+    card(
+      tagList(lapply(result$messages, p)),
+      p("For more details about this results click below"),
+      actionButton("next_sec", "See details")
     )
-    
-    crit2 <- min(which(aff_df$aff_pct>50))
-    
-    crit3 <- fmi_rent %>%
-      select(cost_burden30_20_p) 
-    
-    high_criteria1 <- if(crit1$risk_level == "high" & 
-                         aff_df$aff_proj[5] == input$proj_size
-    ) {
-      paste("The project meets the requirement that all units be affordable.")
-    } else {
-      paste("Projects in high-risk areas are required to only include afforable units.")
-    }
-    
-    high_criteria2 <- if(crit1$risk_level == "high" & 
-                         round(aff_df$aff_proj[min(which(aff_df$aff_pct>50))]/
-                               input$proj_size*100,0) >= 
-                         round(crit3$cost_burden30_20_p*100,0)
-    ) {
-      paste0(round(aff_df$aff_proj[min(which(aff_df$aff_pct>50))]/input$proj_size*100,0), 
-             "% of units are affordable at ",
-             aff_df$aff_level[min(which(aff_df$aff_pct>50))], 
-             ". The project meets the requirement that the share of units affordable 
-            to at least half the renter population be greater than or equal to 
-            the percent of housing cost burdened households.")
-    } else {
-      paste0(round(aff_df$aff_proj[min(which(aff_df$aff_pct>50))]/input$proj_size*100,0), 
-             "% of units are affordable at ",
-             aff_df$aff_level[min(which(aff_df$aff_pct>50))],
-             ". The share of units affordable to at least half the renter 
-             population must be greater than or equal to the ", 
-             round(crit3$cost_burden30_20_p*100,0),
-             "% of housing cost burdened households")
-    }
-    
-    high_criteria3 <- if(crit1$risk_level == "high" & 
-                         aff_df$aff_proj[5] == input$proj_size &
-                         round(aff_df$aff_proj[min(which(aff_df$aff_pct>50))]/
-                               input$proj_size*100,0) >= 
-                         round(crit3$cost_burden30_20_p*100,0)) {
-      paste("This project is recommended for support.")
-    }
-    else {
-      paste("This project is not recommended for support until it meets these conditions.")
-    }
-    
-    medium_criteria <- if(crit1$risk_level == "medium" & 
-                          round(aff_df$aff_proj[min(which(aff_df$aff_pct>50))]/
-                                input$proj_size*100,0) >= 
-                          round(crit3$cost_burden30_20_p*100,0)
-    ) {
-      paste0(round(aff_df$aff_proj[min(which(aff_df$aff_pct>50))]/input$proj_size*100,0), 
-             "% of units are affordable at ",
-             aff_df$aff_level[min(which(aff_df$aff_pct>50))], 
-             ". The project meets the requirement that the share of units affordable 
-            to at least half the renter population be greater than or equal to 
-            the percent of housing cost burdened households. 
-             This project is recommended for support.")
-    } else {
-      paste0(round(aff_df$aff_proj[min(which(aff_df$aff_pct>50))]/input$proj_size*100,0), 
-             "% of units are affordable at ",
-             aff_df$aff_level[min(which(aff_df$aff_pct>50))],
-             ". The share of units affordable to at least half the renter 
-             population must be greater than or equal to the ", 
-             round(crit3$cost_burden30_20_p*100,0),
-             "% of housing cost burdened households. 
-             This project is not recommended for support until it meets this condition.")
-    }
-    
-    low_criteria <- if(crit1$risk_level == "low" & 
-                       aff_df$aff_proj[2]/input$proj_size >= .1
-    ) {
-      paste0(round(aff_df$aff_proj[2]/input$proj_size*100,0), 
-             "% of units are affordable at ",
-             aff_df$aff_level[2],
-             ". The project meets the requirement that the share of units affordable 
-            at 50% AMI or below be greater than or equal to 10% of all units. 
-             This project is recommended for support.")
-    } else {
-      paste("Projects in low risk areas must include at least 10% of units affordable 
-            at 50% AMI or below. This project is not recommended for 
-            support until it meets this condition.")
-    }
-    
-    
-    
-    if(input$affordable30+
-       input$affordable50+
-       input$affordable60+
-       input$affordable70+
-       input$affordable80>
-       input$proj_size) {
-      paste("Please check that the number of affordable units is no larger than
-            the total number of units")
-    }
-    else{
-      card(
-        if(crit1$risk_level == "high") {
-          high_criteria1
-          high_criteria2
-        }
-        else if(crit1$risk_level == "medium") {
-          medium_criteria
-        }
-        else {
-          low_criteria
-        },
-        
-        p("For more details about this results click below"), 
-        actionButton("next_sec", "See details"),
-        # p("For a PDF-form report, click below"),
-        # actionButton("next_sec", "Export report")
-        )
-    }
   })
 }
 

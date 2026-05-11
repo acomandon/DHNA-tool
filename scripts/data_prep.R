@@ -20,34 +20,10 @@ library(ggalluvial)
 library(ggrepel)
 library(forcats)
 
-# CONFIG
+# CONFIG and shared helpers
 source(here("R", "config.R"))
-
-# functions
-# median linear interpolation
-med_lin_est <- function(name, value) {
-  tot_value = as.numeric(value)
-  mp = min(which(cumsum(tot_value)/sum(tot_value) > .5))
-  bin_1 = as.numeric(str_extract(name[mp],"(?<=_)[0-9]+")) 
-  bin_0 = as.numeric(str_extract(name[min(which(cumsum(tot_value)/sum(tot_value) > .5))-1],"(?<=_)[0-9]+")) 
-  inc_width = bin_1 - bin_0
-  inc_ratio = (sum(tot_value)/2 - sum(tot_value[1:(mp-1)]))/tot_value[mp]
-  inc_ratio_1 <- .5/(sum(tot_value[1])/sum(tot_value))
-  median_value = ifelse(mp > 1, bin_0+inc_ratio*inc_width, 
-                        as.numeric(str_extract(name[mp],"(?<=_)[0-9]+"))[mp+1]*inc_ratio_1)
-  return(median_value)
-}
-# renter under FMI cutoff adjustment
-renter_adj <- function(name, value, fmi) {
-  inc_bins = as.numeric(str_extract(name,"(?<=_)[0-9]+"))
-  mp = min(which(inc_bins>fmi))
-  bin_1 = inc_bins[mp] 
-  bin_0 = inc_bins[mp-1]
-  inc_width = bin_1 - bin_0
-  bin_ratio = (inc_width - (bin_1 - fmi))/inc_width
-  adjusted_pop = round(sum(value[1:mp-1])+value[mp]*bin_ratio)
-  return(adjusted_pop)
-}
+source(here("R", "bin_interpolation.R"))
+source(here("R", "risk_classifier.R"))
 
 
 # Data Downloader ---------------------------------------------------------
@@ -436,7 +412,9 @@ Jefferson_ma <- st_read(here("data", "prepackaged", "Market_areas", "Comp_Plan_M
   select(OBJECTID, Name) %>% 
   rename(market_area = Name)
 # write to tool data folder for use within the tool
-st_write(Jefferson_ma, here("DHNA", "data", "gis", "Comp_Plan_Market_Areas.shp"),
+# Use a short DBF-safe column name (sf abbreviates anything longer than ~7 chars).
+st_write(Jefferson_ma %>% rename(mkt_area = market_area),
+         here("DHNA", "data", "gis", "Comp_Plan_Market_Areas.shp"),
          append = FALSE)
 # join market areas to population center layer and summarize population
 # data by market area
@@ -956,63 +934,7 @@ bg_ct_data <- BGxCT %>%
 
 # Risk assessment ---------------------------------------------------------
 
-risk_class <- bg_ct_data %>% 
-  mutate(low_N_vulnerable = if_else(renters_20 < 300 &
-                                      (median_hhinc_10 < 47000), 1, 0)) %>% 
-  filter(low_N_vulnerable == 1|
-           renters_20 > 300 &
-           (median_hhinc_10 < 47000)
-  ) %>%
-  mutate(m1a = if_else(rank_rents > 79|rank_rents2 > 79, 1, 0,
-                       missing = 0),
-         m1b = if_else(rank_HV > 79 & owner_20_ct > 500, 1, 0,
-                       missing = 0),
-         m1 = if_else(m1a+m1b > 0 & pop_change10_20 > 0, 1, 0),
-         m2a = if_else(rank_college > 79,1,0),
-         m2b = if_else(rank_hhinc > 79,1,0),
-         m2c = if_else(rank_hi_inc > 79,1,0),
-         m2d = if_else(rank_lo_inc < 21,1,0),
-         m2e = if_else(black_change10_20 < -200 & 
-                         blackpct_ch_00_20 < -.2, 1,0),
-         m2f = if_else(pop_change10_20 > 0, 1, 0),
-         m2 = if_else(m2a+m2b+m2c+m2d+m2e > 1 &  m2f == 1 &
-                        (median_hhinc_20 > 66000|median_rent_20 >1100), 
-                      1, 0, missing = 0)) %>% 
-  mutate(h1a = if_else((rank_rents > 49 & rank_rents < 80)|
-                         (rank_rents2 > 49 & rank_rents2 < 80), 1, 0,
-                       missing = 0),
-         h1b = if_else(rank_HV > 49 & rank_HV < 80 & owner_20_ct > 500, 1, 0,
-                       missing = 0),
-         h1 = if_else(h1a+h1b > 0, 1, 0),
-         h2a = if_else(rank_college > 59,1,0),
-         h2b = if_else(rank_hhinc > 59,1,0),
-         h2c = if_else(rank_hi_inc > 59,1,0),
-         h2d = if_else(rank_lo_inc < 41,1,0),
-         h2e = if_else(black_change10_20 < 0 & 
-                         blackpct_ch_00_20 < -.2, 1,0),
-         h2f = if_else(pop_change10_20 > 0, 1, 0),
-         h2 = if_else(h2a+h2b+h2c+h2d+h2e > 1 & #h2f == 1 &
-                        median_hhinc_20 < 66000 &
-                        median_rent_20 < 1100, 1, 0,
-                      missing = 0),
-         h3a = if_else(rank_housing_tight > 59|
-                         rank_vacant_ch > 59|
-                         rank_renter_p > 59|
-                         rank_permits > 59, 1, 0,
-                       missing = 0),
-         h3b = if_else(rank_rents > 49|rank_rents2 > 49, 1, 0,
-                       missing = 0),
-         h3c = if_else(rank_HV > 49 & owner_20_ct > 500, 1, 0,
-                       missing = 0),
-         h3 = if_else(h3a > 0 & h1 == 1, 1, 0),) %>% 
-  mutate(hi_all = if_else(h1 == 1 |h2 == 1 |h3 == 1, 1, 0),
-         med_all = if_else((m1 == 1 | m2 == 1), 1, 0),
-         risk_level = if_else(hi_all == 1, "high", "low"),
-         risk_level = if_else(med_all == 1, "medium", risk_level),
-         risk_level = factor(risk_level, levels = c("low", "medium", "high"))) %>% 
-  select(GISJOIN_proj, hi_all, med_all, h1,h2,h3,m1,m2, risk_level)
-
-bg_ct_risk <- left_join(bg_ct_data, risk_class) %>% 
+bg_ct_risk <- left_join(bg_ct_data, classify_risk(bg_ct_data), by = "GISJOIN_proj") %>%
   mutate(risk_level = if_else(is.na(risk_level) == TRUE, "low", risk_level))
 
 rm(list=setdiff(ls(), c("bg2020", "bg_ct_data", "bg_ct_risk", "local_area")))
