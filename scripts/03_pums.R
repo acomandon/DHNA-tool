@@ -65,3 +65,11 @@ ky_h <- read_ipums_micro(ddi) %>%
   select(HHWT, HHINC_levels, RENT_levels,RENTGRS, rent_burden)
 head(ky_h)
 write_csv(ky_h, here("DHNA", "data", "hh_micro.csv"))
+
+# Validation ---------------------------------------------------------------
+validation_banner("Stage 03 — PUMS household microdata")
+check_min_rows(ky_h, "ky_h (renter PUMS)", 100)
+check_na_share(ky_h, "HHINC_levels", 0.95, "warn")
+check_na_share(ky_h, "RENT_levels", 0.95, "warn")
+dhna_check(sum(ky_h$HHWT, na.rm = TRUE) > 0, "HHWT sums positive",
+           sprintf("weighted renters %.0f", sum(ky_h$HHWT, na.rm = TRUE)), "error")

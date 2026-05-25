@@ -126,3 +126,10 @@ dir.create(file.path(here("data", "processed")),
 pop_ma_s <- bind_rows(pop_s, Jefferson_bg_ma) %>%
   rename(GISJOIN_proj = GISJOIN) %>%
   write_csv(., here("DHNA", "data", "pop_ethnorace.csv"))
+
+# Validation ---------------------------------------------------------------
+validation_banner("Stage 02 — local area & ethnoracial change")
+check_coverage(dplyr::n_distinct(local_area$GISJOIN_proj), nrow(bg2020),
+               "local_area covers focal BGs", min_frac = 0.9, severity = "warn")
+check_values_present(pop_ethnorace, "data_yr", c(1990, 2000, 2010, 2020))
+check_na_share(pop_s, "pop", min_frac = 0.95, severity = "warn")

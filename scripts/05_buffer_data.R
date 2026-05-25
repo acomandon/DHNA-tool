@@ -101,3 +101,12 @@ bg_data <- pop_change %>%
          lo_inc_ch = (lo_inc_hh_20/HH_20)-(lo_inc_hh_10/HH_10),
          lo_inc_ch_pop = lo_inc_hh_20-lo_inc_hh_10,
          hhinc_ch = (median_hhinc_20-median_hhinc_10)/median_hhinc_10)
+
+# Validation ---------------------------------------------------------------
+validation_banner("Stage 05 — buffer data")
+# bg_data is assembled by left-joining onto pop_change; the row count must not
+# change (a stray many-to-many join would fan rows out).
+check_rows_equal(bg_data, "bg_data", nrow(pop_change), "pop_change")
+check_na_share(bg_data, "renter_p_ch", 0.8, "warn")
+check_na_share(bg_data, "college_edu", 0.8, "warn")
+check_na_share(bg_data, "hhinc_ch", 0.8, "warn")

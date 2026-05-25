@@ -29,6 +29,7 @@ library(forcats)
 source(here("R", "config.R"))
 source(here("R", "bin_interpolation.R"))
 source(here("R", "risk_classifier.R"))
+source(here("R", "validate.R"))
 
 # Optional: first-time data download (uncomment, then re-comment after run)
 # source(here("scripts", "data_downloader.R"))

@@ -45,7 +45,9 @@ bl90xbg10 <- read_nhgis(nhgis_xwalk90_10) %>%
 nhgis_xwalk10_20 <- list.files(here("data", "nhgis", "crosswalks"),
                                pattern = "nhgis_bg2010_bg2020",
                                full.names = TRUE)
-bg90_20 <- read_nhgis(nhgis_xwalk10_20) %>%
+# Read the 2010->2020 crosswalk once; it is reused for all three vintages below.
+xwalk10_20 <- read_nhgis(nhgis_xwalk10_20)
+bg90_20 <- xwalk10_20 %>%
   left_join(., bl90xbg10) %>%
   mutate(across(pop:pop_latino, ~ .x * wt_pop)) %>%
   group_by(bg2020gj, bg2020ge) %>%
@@ -90,7 +92,7 @@ bl00xbg10 <- read_nhgis(nhgis_xwalk00_10) %>%
   summarise(across(pop:pop_latino, ~ sum(.,na.rm = T)))
 # Join 2000 data standardized to 2010 geography to 2020 crosswalk
 #  and apply individual weights
-bg00_20 <- read_csv(nhgis_xwalk10_20) %>%
+bg00_20 <- xwalk10_20 %>%
   left_join(., bl00xbg10) %>%
   mutate(across(pop:pop_latino, ~ .x * wt_pop)) %>%
   group_by(bg2020gj, bg2020ge) %>%
@@ -188,7 +190,7 @@ bg2010 <- read_nhgis(nhgis_2010_bg) %>%
   select(-YEAR:-NAME_E, -NAME_M)
 # Join 2000 data to 2010 crosswalk and apply appropriate weights
 
-bg10_20 <- read_nhgis(nhgis_xwalk10_20) %>%
+bg10_20 <- xwalk10_20 %>%
   left_join(., bg2010, by = join_by(bg2010gj == GISJOIN)) %>%
   mutate(across(starts_with("pop"), ~ .x * wt_pop),
          across(starts_with("adult"), ~ .x * wt_adult),
@@ -301,3 +303,28 @@ bg2020 <- read_nhgis(nhgis_2020_bg) %>%
 # consolidated socioeconomic data for 2013 and 2023
 bg_data10_20 <- bind_rows(bg10_20,
                           bg2020)
+
+# Validation ---------------------------------------------------------------
+validation_banner("Stage 01 — geography standardization")
+# The 2010->2020 crosswalk drives every vintage; its weights must partition
+# each source block group (sum to 1) for each weighted quantity.
+for (w in c("wt_pop", "wt_adult", "wt_hu", "wt_renthu", "wt_ownhu")) {
+  check_weights_sum_to_one(xwalk10_20, "bg2010gj", w)
+}
+check_min_rows(bg2020, "bg2020", 100)
+check_min_rows(bg90_20, "bg90_20", 100)
+check_min_rows(bg00_20, "bg00_20", 100)
+check_min_rows(bg10_20, "bg10_20", 100)
+check_coverage(min(nrow(bg90_20), nrow(bg00_20), nrow(bg10_20)),
+               nrow(bg2020), "BG counts consistent across vintages",
+               min_frac = 0.7, severity = "warn")
+# Population conservation: each crosswalked vintage's total should sit within a
+# plausible band of the 2020 total (catches a bad block-level crosswalk).
+ref_pop <- sum(bg2020$pop, na.rm = TRUE)
+for (nm in c("bg90_20", "bg00_20", "bg10_20")) {
+  tot <- sum(get(nm)$pop, na.rm = TRUE)
+  dhna_check(tot > 0.4 * ref_pop & tot < 2.5 * ref_pop,
+             sprintf("%s total pop within plausible band of 2020", nm),
+             sprintf("%.0f vs 2020 %.0f", tot, ref_pop), "warn")
+}
+rm(xwalk10_20)

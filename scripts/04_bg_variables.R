@@ -167,3 +167,14 @@ nhood_vars20_s <- local_area %>%
             HH_20 = sum(HH),
             hi_inc_hh_20 = sum(hi_inc_hh),
             lo_inc_hh_20 = sum(lo_inc_hh))
+
+# Validation ---------------------------------------------------------------
+validation_banner("Stage 04 — block-group variables")
+check_min_rows(pop_change, "pop_change", 100)
+check_na_share(med_rent20_s, "median_rent_20", 0.5, "warn")
+check_range(med_rent10_s, "median_rent_10", 0, 10000, "warn")
+check_range(med_rent20_s, "median_rent_20", 0, 10000, "warn")
+check_range(med_hhinc10_s, "median_hhinc_10", 0, 500000, "warn")
+check_range(med_hhinc20_s, "median_hhinc_20", 0, 500000, "warn")
+check_range(med_hv10_s, "median_hv_10", 0, 5000000, "warn")
+check_range(med_hv20_s, "median_hv_20", 0, 5000000, "warn")

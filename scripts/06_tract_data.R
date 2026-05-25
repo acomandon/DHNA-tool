@@ -171,3 +171,14 @@ bg_ct_data <- BGxCT %>%
          rank_HV = ceiling(rank_HV/max(rank_HV, na.rm = T)*100),
          rank_permits = rank(permits_N, na.last = "keep"),
          rank_permits = ceiling(rank_permits/max(rank_permits, na.rm = T)*100))
+
+# Validation ---------------------------------------------------------------
+validation_banner("Stage 06 — tract data & ranks")
+# CT-level burden joined onto BGs; low coverage means the BG<->CT join broke.
+check_na_share(bg_ct_data, "cost_burden30_20_p", 0.8, "warn")
+# Every rank feeds classify_risk(); an all-NA rank silently disables a criterion.
+rank_cols <- c("rank_renter_p", "rank_housing_tight", "rank_hh_growth",
+               "rank_vacant_ch", "rank_college", "rank_hhinc", "rank_hi_inc",
+               "rank_lo_inc", "rank_rents", "rank_rents2", "rank_HV", "rank_permits")
+for (rc in rank_cols) check_not_all_na(bg_ct_data, rc, severity = "error")
+for (rc in rank_cols) check_range(bg_ct_data, rc, 1, 100, severity = "warn")
