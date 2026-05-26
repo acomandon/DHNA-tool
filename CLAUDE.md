@@ -16,7 +16,8 @@ Ongoing directions for the tool — keep these in mind when suggesting changes o
 2. **Refresh all data** to the latest available vintages (NHGIS datasets, ACS releases, PUMS samples, HUD AFFH, crosswalks, shapefiles).
 3. **Split the assessment into separate rental and ownership project modules** — currently the risk model and UI treat housing as a single category.
 4. **Update the displacement risk methodology** (the `classify_risk()` rule block in `R/risk_classifier.R`). Open to methodological changes, not just parameter tweaks.
-5. **Add a commercial gentrification measure** — a new dimension alongside the residential displacement risk currently computed.
+5. **Explore generalizing the tool for transfer to other cities** — audit what remains locality-specific (UI branding/text, prepackaged data conventions, market-area inputs, etc.) and scope what would be needed to retarget the tool to another metro. `R/config.R` already isolates most locality/vintages knobs from Goals #1–#2; this goal is about closing the rest.
+6. **Add a commercial gentrification measure** — a new dimension alongside the residential displacement risk currently computed.
 
 ## Pipeline structure
 
