@@ -13,10 +13,15 @@ server <- function(input, output, session) {
 
   loc <- mod_location_server("location", lvm_bg_geo = lvm_bg_geo)
 
-  aff <- mod_affordability_server("affordability",
-                                  bg_id = loc$bg_id,
-                                  proj_size = loc$proj_size,
-                                  adat_data = adat_data)
+  aff_rental <- mod_affordability_rental_server("affordability_rental",
+                                                bg_id = loc$bg_id,
+                                                proj_size = loc$proj_size,
+                                                adat_data = adat_data)
+
+  aff_ownership <- mod_affordability_ownership_server("affordability_ownership",
+                                                     bg_id = loc$bg_id,
+                                                     proj_size = loc$proj_size,
+                                                     adat_data = adat_data)
 
   mod_area_overview_server("area",
                            bg_id = loc$bg_id,
@@ -29,21 +34,39 @@ server <- function(input, output, session) {
                            lvm_ma_geo = lvm_ma_geo)
 
   # Navigation ----
-  # "next page" on Location -> (re)insert the Affordability levels panel.
+  # "next page" on Location -> (re)insert the matching Affordability panel
+  # based on the chosen project tenure (rental vs ownership).
   observeEvent(loc$go_to_form(), {
     removeTab(inputId = "ADI_tabs", target = "form")
     removeTab(inputId = "ADI_tabs", target = "explainer")
+    panel <- if (identical(loc$tenure(), "ownership")) {
+      mod_affordability_ownership_ui("affordability_ownership")
+    } else {
+      mod_affordability_rental_ui("affordability_rental")
+    }
     nav_insert(
       "ADI_tabs",
       target = "location",
       select = TRUE,
       position = "after",
-      mod_affordability_ui("affordability")
+      panel
     )
   }, ignoreInit = TRUE)
 
-  # "See details" on Affordability -> insert the Area overview panel.
-  observeEvent(aff$see_details(), {
+  # "See details" on either Affordability panel -> insert the Area overview.
+  # Only the currently-inserted panel's button can fire, so the two observers
+  # don't conflict.
+  observeEvent(aff_rental$see_details(), {
+    nav_insert(
+      "ADI_tabs",
+      target = "form",
+      select = TRUE,
+      position = "after",
+      mod_area_overview_ui("area")
+    )
+  }, ignoreInit = TRUE)
+
+  observeEvent(aff_ownership$see_details(), {
     nav_insert(
       "ADI_tabs",
       target = "form",

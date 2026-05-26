@@ -1,6 +1,7 @@
-# Affordability levels panel — AMI unit inputs plus the two result blocks
-# (risk assessment summary and the recommendation). The recommendation is
-# computed once in a shared reactive and consumed by both outputs.
+# Affordability levels panel — rental tenure path. AMI unit inputs plus the
+# two result blocks (risk assessment summary and the recommendation). The
+# recommendation is computed once in a shared reactive and consumed by both
+# outputs.
 #
 # Args:
 #   bg_id      reactive returning the focal block group GISJOIN
@@ -9,7 +10,7 @@
 # Returns:
 #   list(see_details = reactive(input$next_sec))  drives the Area overview panel
 
-mod_affordability_ui <- function(id) {
+mod_affordability_rental_ui <- function(id) {
   ns <- NS(id)
   nav_panel(
     "Affordability levels", value = "form",
@@ -47,7 +48,7 @@ mod_affordability_ui <- function(id) {
   )
 }
 
-mod_affordability_server <- function(id, bg_id, proj_size, adat_data) {
+mod_affordability_rental_server <- function(id, bg_id, proj_size, adat_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -58,7 +59,7 @@ mod_affordability_server <- function(id, bg_id, proj_size, adat_data) {
     # Computed once after Submit; both output blocks consume the cached result.
     recommendation_result <- reactive({
       req(input$submit)
-      recommend_project(
+      recommend_project_rental(
         risk_level = area()$risk_level,
         project_size = proj_size(),
         affordable_units = list(

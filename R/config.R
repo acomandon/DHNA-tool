@@ -56,6 +56,19 @@ hud_affh <- list(
   tract_csv   = "AFFH_tract_AFFHT0007_December2024.csv"
 )
 
+# HUD HOME / Housing Trust Fund Homeownership Sales Price Limits ------------
+# Per-area maximum purchase price limits for ownership projects.
+# Louisville/Jefferson County, KY-IN HUD Metro FMR Area, FY2024
+# (effective 2024-09-01). Vectors index by # of units in the dwelling (1-4);
+# typical for-sale projects use [1] (1-unit, i.e. per-unit pricing).
+# Refresh by pulling the per-area row from HUD's annual
+# HOME-and-Housing-Trust-Fund-Homeownership-Sales-Price-Limits xlsx
+# (https://www.huduser.gov/portal/datasets/home-ownership-value-limits.html).
+hud_for_sale <- list(
+  existing_home    = c(228000L, 292000L, 353000L, 438000L),
+  new_construction = c(332000L, 425000L, 515000L, 637000L)
+)
+
 # Not yet absorbed into config (deferred):
 #   - HUD_FMI table (data_prep.R) — will move to data/prepackaged/hud_fmi.csv
 #   - Risk-classification thresholds (data_prep.R) — Goal #4 will overhaul

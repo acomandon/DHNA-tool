@@ -29,7 +29,8 @@ source("../R/project_recommender.R")
 source("R/mod_intro.R")
 source("R/mod_housing_need.R")
 source("R/mod_location.R")
-source("R/mod_affordability.R")
+source("R/mod_affordability_rental.R")
+source("R/mod_affordability_ownership.R")
 source("R/mod_area_overview.R")
 
 # Map click container (initial empty location) ------------------------------

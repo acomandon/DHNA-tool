@@ -1,15 +1,26 @@
-# Location panel — project size/type inputs, the address geocoder and click
-# map, and resolution of the focal block group (bg_id) from the chosen point.
+# Location panel — project tenure choice, size/type inputs, the address
+# geocoder and click map, and resolution of the focal block group (bg_id)
+# from the chosen point.
 #
 # Returns a list of reactives consumed elsewhere:
 #   bg_id       the GISJOIN of the block group containing the chosen point
 #   proj_size   input$proj_size
+#   tenure      input$tenure ("rental" | "ownership") — drives which
+#                 Affordability panel is inserted on "next page"
 #   go_to_form  input$valid_loc_btn (drives insertion of the Affordability panel)
 
 mod_location_ui <- function(id) {
   ns <- NS(id)
   nav_panel(
     "Location", value = "location",
+    p("Start by telling us what kind of project this is. The tool's assessment
+              differs between rental and ownership projects (mixed-tenure
+              projects are coming in a future release)."),
+    radioButtons(ns("tenure"), "Project type",
+                 choices = c("Rental" = "rental",
+                             "Homeownership" = "ownership"),
+                 selected = "rental",
+                 inline = TRUE),
     p("Project can have different impacts based on where they are located.
               Please, enter information about where the project will be located."),
     numericInput(ns("proj_size"), "Number of units in proposed project",
@@ -137,6 +148,7 @@ mod_location_server <- function(id, lvm_bg_geo) {
     list(
       bg_id = bg_id,
       proj_size = reactive(input$proj_size),
+      tenure = reactive(input$tenure),
       go_to_form = reactive(input$valid_loc_btn)
     )
   })
