@@ -14,6 +14,25 @@ library(sf)
 # CONFIG
 source(here("R", "config.R"))
 
+# Make re-runs safe ---------------------------------------------------------
+# download_extract() appends, so without this a re-run leaves old extracts
+# next to new ones and read_nhgis()/read_ipums_sf() then see multiple files.
+# Wipe each download target up front; the dir.create() calls below recreate them.
+for (d in c(
+  here("data", "nhgis", "block", "bl1990"),
+  here("data", "nhgis", "block", "bl2000"),
+  here("data", "nhgis", "blockgroup", "bg2010"),
+  here("data", "nhgis", "blockgroup", "bg2020"),
+  here("data", "nhgis", "tract", "ct2020"),
+  here("data", "pums_usa", "acs_21_23"),
+  here("data", "nhgis", "crosswalks"),
+  here("data", "nhgis", "gis", "blockgroup", "bg2023"),
+  here("data", "nhgis", "gis", "blockgroup", "bgc2020"),
+  here("data", "nhgis", "gis", "tract", "ct2023")
+)) {
+  if (dir.exists(d)) unlink(d, recursive = TRUE, force = TRUE)
+}
+
 
 # NHGIS data --------------------------------------------------------------
 
@@ -216,8 +235,8 @@ nhgis_2023_bg_gis <- list.files(here("data", "nhgis", "gis", "blockgroup", "bg20
 lvm_bg <- read_ipums_sf(nhgis_2023_bg_gis) %>% 
   filter(STATEFP == locality$state_fips, COUNTYFP == locality$county_fips) %>%
   st_transform(crs=4326)
-st_write(lvm_bg, here("data", "nhgis", "gis", "blockgroup", "bg2023", "KY_Jefferson_BG_2023.shp"))
-st_write(lvm_bg, here("DHNA", "data", "gis", "KY_Jefferson_BG_2023.shp"))
+st_write(lvm_bg, here("data", "nhgis", "gis", "blockgroup", "bg2023", "KY_Jefferson_BG_2023.shp"), delete_dsn = TRUE)
+st_write(lvm_bg, here("DHNA", "data", "gis", "KY_Jefferson_BG_2023.shp"), delete_dsn = TRUE)
 
 # 2020 block group population center
 dir.create(file.path(here("data", "nhgis", "gis", "blockgroup", "bgc2020")), 
@@ -235,7 +254,7 @@ nhgis_2020_bgc_gis <- list.files(here("data", "nhgis", "gis", "blockgroup", "bgc
 lvm_bgc <- read_ipums_sf(nhgis_2020_bgc_gis) %>% 
   filter(STATEFP == locality$state_fips, COUNTYFP == locality$county_fips) %>%
   st_transform(crs=4326)
-st_write(lvm_bgc, here("data", "nhgis", "gis", "blockgroup", "bgc2020", "KY_Jefferson_BGC_2020.shp"))
+st_write(lvm_bgc, here("data", "nhgis", "gis", "blockgroup", "bgc2020", "KY_Jefferson_BGC_2020.shp"), delete_dsn = TRUE)
 
 # 2020 Census Tract geography
 dir.create(file.path(here("data", "nhgis", "gis", "tract", "ct2023")), 
@@ -253,6 +272,6 @@ nhgis_2020_ct_gis <- list.files(here("data", "nhgis", "gis", "tract", "ct2023"),
 lvm_ct <- read_ipums_sf(nhgis_2020_ct_gis) %>% 
   filter(STATEFP == locality$state_fips, COUNTYFP == locality$county_fips) %>%
   st_transform(crs=4326)
-st_write(lvm_ct, here("data", "nhgis", "gis", "tract", "ct2023", "KY_Jefferson_tract_2023.shp"))
-st_write(lvm_ct, here("DHNA", "data", "gis", "KY_Jefferson_tract_2023.shp"))
+st_write(lvm_ct, here("data", "nhgis", "gis", "tract", "ct2023", "KY_Jefferson_tract_2023.shp"), delete_dsn = TRUE)
+st_write(lvm_ct, here("DHNA", "data", "gis", "KY_Jefferson_tract_2023.shp"), delete_dsn = TRUE)
 

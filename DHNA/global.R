@@ -71,15 +71,15 @@ colors_axis <- c(rev(hcl.colors(4, "Vik")), rev(hcl.colors(4, "Vik")))
 # Prebuilt housing-mismatch alluvial plot (built once, shared by all sessions)
 housing_mismatch_plot <- hh_micro %>%
   mutate(HHINC_levels = factor(HHINC_levels, levels = c("Above 80%",
-                                                        "50% to 80% ($64,625)",
-                                                        "30% to 50% ($40,400)",
-                                                        "Below 30%  ($27,125)")),
+                                                        "50% to 80% ($73,250)",
+                                                        "30% to 50% ($45,800)",
+                                                        "Below 30%  ($27,475)")),
          HHINC_levels = fct_relabel(HHINC_levels, function(x)
            str_wrap(x, 10)),
          RENT_levels = factor(RENT_levels, levels = c("Above 80%  (market)",
-                                                      "50% to 80% ($1615)",
-                                                      "30% to 50% ($1010)",
-                                                      "Below 30%  ($678)")),
+                                                      "50% to 80% ($1831)",
+                                                      "30% to 50% ($1145)",
+                                                      "Below 30%  ($687)")),
          RENT_levels = fct_relabel(RENT_levels, function(x)
            str_wrap(x, 10))) %>%
   group_by(HHINC_levels, RENT_levels) %>%

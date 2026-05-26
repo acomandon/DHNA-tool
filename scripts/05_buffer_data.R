@@ -48,8 +48,15 @@ lvm_bg_popctr_buffer <- lvm_bg_popctr_geo %>%
   rename(GISJOIN_proj = GISJOIN_BG_PC) %>%
   st_transform(crs = params$permit_buffer_crs) %>%
   st_buffer(dist = params$permit_buffer_ft)
-# Load permit data
-build_permits <- st_read(here("data", "prepackaged", "permits", "res_permits2.shp"))
+# Load permit data from the latest Louisville Metro active-construction permits
+# export (admin$permits_csv). Filter to residential subtypes (user choice for
+# this refresh: any PERMIT_TYPE starting with "Residential") and project to the
+# buffer CRS for the spatial join below.
+build_permits <- read_csv(here("data", "administrative", "permits", admin$permits_csv)) %>%
+  filter(str_starts(PERMIT_TYPE, "Residential"),
+         !is.na(LATITUDE), !is.na(LONGITUDE)) %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs = 4326) %>%
+  st_transform(crs = params$permit_buffer_crs)
 # Summarize the number of permits
 bg_permits <- st_join(lvm_bg_popctr_buffer, build_permits,
                       join = st_intersects) %>%
@@ -57,10 +64,19 @@ bg_permits <- st_join(lvm_bg_popctr_buffer, build_permits,
   group_by(GISJOIN_proj) %>%
   summarize(permits_N = n()) %>%
   ungroup()
-# Load affordable unit database and transform to state plane projection
-affordable <- st_read(here("data", "prepackaged", "affordable", "affordable_housing.shp")) %>%
-  select(NHPD_Prope, Property_N, Total_Unit, EndDate_Ye)
-affordable <- st_transform(affordable, params$permit_buffer_crs)
+# Affordable units: the existing NHPD-based dataset plus the latest Louisville
+# ARP-funded Housing Trust Fund projects (admin$htf_csv). ARP rows are treated
+# as always active (EndDate_Ye = 9999) so they pass the EndDate cutoff filter
+# applied after the spatial join.
+affordable_nhpd <- st_read(here("data", "prepackaged", "affordable", "affordable_housing.shp")) %>%
+  st_transform(crs = params$permit_buffer_crs) %>%
+  transmute(Total_Unit, EndDate_Ye, source = "NHPD")
+affordable_arp <- read_csv(here("data", "administrative", "housing trust fund", admin$htf_csv)) %>%
+  filter(!is.na(X), !is.na(Y)) %>%
+  st_as_sf(coords = c("X", "Y"), crs = 3857) %>%
+  st_transform(crs = params$permit_buffer_crs) %>%
+  transmute(Total_Unit = Number_of_Units, EndDate_Ye = 9999L, source = "ARP-0023")
+affordable <- bind_rows(affordable_nhpd, affordable_arp)
 # Summarize the number of affordable units
 bg_ah <- st_join(lvm_bg_popctr_buffer, affordable,
                  join = st_intersects) %>%

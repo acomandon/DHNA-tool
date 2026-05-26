@@ -74,9 +74,9 @@ mod_housing_need_server <- function(id, hh_micro, housing_mismatch_plot) {
       hh_micro %>%
         group_by(HHINC_levels, rent_burden) %>%
         summarise(renters = sum(HHWT, na.rm = T)) %>%
-        mutate(HHINC_levels = factor(HHINC_levels, levels = c("Below 30%  ($27,125)",
-                                                              "30% to 50% ($40,400)",
-                                                              "50% to 80% ($64,625)",
+        mutate(HHINC_levels = factor(HHINC_levels, levels = c("Below 30%  ($27,475)",
+                                                              "30% to 50% ($45,800)",
+                                                              "50% to 80% ($73,250)",
                                                               "Above 80%")),
                HHINC_levels = fct_relabel(HHINC_levels, function(x)
                  str_wrap(x, 10)),

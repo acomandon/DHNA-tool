@@ -13,12 +13,17 @@
 # rent_fmi20_ct calculations. Both definitions are preserved verbatim; a
 # future cleanup should split the names.
 
-# HUD income limits (midpoint of family of 3 and 4)
-HUD_FMI <- data.frame(MFI_30 = (23030+27750)/2,
-                      MFI_50 = (38150+42350)/2,
-                      MFI_60 = (45780+50820)/2,
-                      MFI_70 = (53410+59290)/2,
-                      MFI_80 = (61000+67750)/2)
+# HUD HOME income limits, midpoint of household sizes 3 and 4, for the
+# Louisville/Jefferson County, KY-IN HUD Metro FMR Area. FY2024 limits, to match
+# the 2020-2024 ACS tract income (reported in 2024 inflation-adjusted dollars).
+# 30/50/60/80 are published HUD values; 70% is computed as 1.4 x the 50% (VLI)
+# limit per size, as HUD publishes no 70% limit (matches the prior method).
+# Refresh: update to the recent ACS's dollar-year HOME limits when vintages change.
+HUD_FMI <- data.frame(MFI_30 = (26050+28900)/2,
+                      MFI_50 = (43400+48200)/2,
+                      MFI_60 = (52080+57840)/2,
+                      MFI_70 = (60760+67480)/2,
+                      MFI_80 = (69400+77100)/2)
 
 # HUD data
 # Unzip the data first
@@ -53,20 +58,20 @@ ct2020 <- ct_data_2020 %>%
   filter(STATE == locality$state_name,
          COUNTY == locality$county_name) %>%
   mutate(GEOID = str_extract(GEO_ID, "(?<=S).*")) %>%
-  rename(renter_20_ct = ASWFE010,
-         rent_burden30_20_ct = ASWFE011,
-         rent_burden50_20_ct = ASWFE012,
-         age_tot = ASNQE001,
-         HH_tot = ASPIE001,
-         dis_tot = AS8RE001) %>%
-  mutate(owner_20_ct = ASWFE002+ASWFE006,
-         own_burden30_20_ct = ASWFE003 + ASWFE007,
-         own_burden50_20_ct = ASWFE004 + ASWFE008,
-         over65 = ASNQE020+ASNQE021+ASNQE022+ASNQE023+ASNQE024+ASNQE025+
-           +ASNQE044+ASNQE045+ASNQE046+ASNQE047+ASNQE048+ASNQE049,
-         SPHH = ASPIE005+ASPIE008,
-         lim_eng = ASQGE004+ASQGE007+ASQGE010+ASQGE013,
-         poverty_wdisability = AS8RE004+AS8RE011+AS8RE018) %>%
+  rename(renter_20_ct = AUXKE010,
+         rent_burden30_20_ct = AUXKE011,
+         rent_burden50_20_ct = AUXKE012,
+         age_tot = AUOVE001,
+         HH_tot = AUQNE001,
+         dis_tot = AU92E001) %>%
+  mutate(owner_20_ct = AUXKE002+AUXKE006,
+         own_burden30_20_ct = AUXKE003 + AUXKE007,
+         own_burden50_20_ct = AUXKE004 + AUXKE008,
+         over65 = AUOVE020+AUOVE021+AUOVE022+AUOVE023+AUOVE024+AUOVE025+
+           +AUOVE044+AUOVE045+AUOVE046+AUOVE047+AUOVE048+AUOVE049,
+         SPHH = AUQNE005+AUQNE008,
+         lim_eng = AURLE004+AURLE007+AURLE010+AURLE013,
+         poverty_wdisability = AU92E004+AU92E011+AU92E018) %>%
   select(GISJOIN, GEOID,
          renter_20_ct,
          rent_burden30_20_ct,
@@ -92,18 +97,18 @@ rent_income20_ct <- ct_data_2020 %>%
   filter(STATE == locality$state_name,
          COUNTY == locality$county_name) %>%
   mutate(GEOID = str_extract(GEO_ID, "(?<=S).*")) %>%
-  rename(renters = ATEVE014,
-         renters_5000 = ATEVE015,
-         renters_9999 = ATEVE016,
-         renters_14999 = ATEVE017,
-         renters_19999 = ATEVE018,
-         renters_24999 = ATEVE019,
-         renters_34999 = ATEVE020,
-         renters_49999 = ATEVE021,
-         renters_74999 = ATEVE022,
-         renters_99999 = ATEVE023,
-         renters_149999 = ATEVE024,
-         renters_200000 = ATEVE025) %>%
+  rename(renters = AVF6E014,
+         renters_5000 = AVF6E015,
+         renters_9999 = AVF6E016,
+         renters_14999 = AVF6E017,
+         renters_19999 = AVF6E018,
+         renters_24999 = AVF6E019,
+         renters_34999 = AVF6E020,
+         renters_49999 = AVF6E021,
+         renters_74999 = AVF6E022,
+         renters_99999 = AVF6E023,
+         renters_149999 = AVF6E024,
+         renters_200000 = AVF6E025) %>%
   select(starts_with("renters"), GISJOIN) %>%
   filter(renters > 0) %>%
   select(-renters) %>%

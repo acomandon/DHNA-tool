@@ -18,14 +18,14 @@ locality <- list(
 # Data vintages -------------------------------------------------------------
 # Edit during a data refresh (Goal #2).
 vintages <- list(
-  acs_5yr_recent   = "2019_2023_ACS5a",
-  acs_5yr_recent_b = "2019_2023_ACS5b",
+  acs_5yr_recent   = "2020_2024_ACS5a",
+  acs_5yr_recent_b = "2020_2024_ACS5b",
   acs_5yr_prior    = "2009_2013_ACS5a",
   decennial_2000   = "2000_SF1b",
   decennial_1990   = "1990_STF1",
-  pums_samples     = c("us2021a", "us2022a", "us2023a"),
-  bg_shapefile     = "210_blck_grp_2023_tl2023",
-  tract_shapefile  = "us_tract_2023_tl2023",
+  pums_samples     = c("us2022a", "us2023a", "us2024a"),
+  bg_shapefile     = "210_blck_grp_2024_tl2024",
+  tract_shapefile  = "us_tract_2024_tl2024",
   bg_popcenter     = "us_blck_grp_cenpop_2020_cenpop2020"
 )
 
@@ -35,6 +35,15 @@ params <- list(
   local_area_buffer_m = 800,
   permit_buffer_ft    = 2640,
   permit_buffer_crs   = 2246
+)
+
+# Administrative data feeds -------------------------------------------------
+# Louisville Metro administrative exports (permits, Housing Trust Fund) that
+# roll forward with each refresh. Drop the new export into the matching
+# subfolder under data/administrative/ and bump the filename here.
+admin <- list(
+  permits_csv = "active_construction_permits_5798371747874481478.csv",
+  htf_csv     = "Louisville_Metro_KY_-__ARP-0023_Louisville_Affordable_Housing_Trust_Fund.csv"
 )
 
 # Not yet absorbed into config (deferred):
