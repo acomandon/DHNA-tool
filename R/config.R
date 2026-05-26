@@ -46,6 +46,16 @@ admin <- list(
   htf_csv     = "Louisville_Metro_KY_-__ARP-0023_Louisville_Affordable_Housing_Trust_Fund.csv"
 )
 
+# HUD AFFH-T release --------------------------------------------------------
+# Update these strings when HUD ships a new AFFHT release. `folder` is the
+# basename of the prepackaged zip (also the directory it unzips into) under
+# data/prepackaged/hud/.
+hud_affh <- list(
+  folder      = "HUD_AFFH_2024",
+  housing_csv = "Housing_tract_AFFHT0007_December2024.csv",
+  tract_csv   = "AFFH_tract_AFFHT0007_December2024.csv"
+)
+
 # Not yet absorbed into config (deferred):
 #   - HUD_FMI table (data_prep.R) — will move to data/prepackaged/hud_fmi.csv
 #   - Risk-classification thresholds (data_prep.R) — Goal #4 will overhaul

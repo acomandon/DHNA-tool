@@ -25,23 +25,23 @@ HUD_FMI <- data.frame(MFI_30 = (26050+28900)/2,
                       MFI_70 = (60760+67480)/2,
                       MFI_80 = (69400+77100)/2)
 
-# HUD data
-# Unzip the data first
-HUDzip <- here("data", "prepackaged", "hud", "HUD_AFFH_2024.zip")
+# HUD AFFH-T data (release identified by hud_affh in R/config.R).
+# Unzip the data first.
+HUDzip <- here("data", "prepackaged", "hud", paste0(hud_affh$folder, ".zip"))
 outDir <- here("data", "prepackaged", "hud")
-unzip(HUDzip,exdir=outDir)
+unzip(HUDzip, exdir = outDir)
 
 # total number of subsidized units
-hud_housing <- read_csv(here("data", "prepackaged", "hud", "HUD_AFFH_2024",
-                             "Housing_tract_AFFHT0007_December2024.csv")) %>%
+hud_housing <- read_csv(here("data", "prepackaged", "hud", hud_affh$folder,
+                             hud_affh$housing_csv)) %>%
   filter(state_name == locality$state_name,
          county_name == locality$county_name,
          program_label == "Summary") %>%
   select(geoid, total_units)
 # Number of households with at least one housing problem and
 # number of households
-hud_tract <- read_csv(here("data", "prepackaged", "hud", "HUD_AFFH_2024",
-                           "AFFH_tract_AFFHT0007_December2024.csv")) %>%
+hud_tract <- read_csv(here("data", "prepackaged", "hud", hud_affh$folder,
+                           hud_affh$tract_csv)) %>%
   filter(state_name == locality$state_name,
          county_name == locality$county_name) %>%
   select(geoid, hh_tot_1_m_hus_pb, hh_tot_husholds)
