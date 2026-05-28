@@ -111,8 +111,8 @@ define_extract_nhgis(
 # B25063: Median Gross rent
 # B25075: Home value
 # B19001: Household income
-# B25091: Mortgage status by SMOCAPI (owner cost burden) — Phase 4.2 owner-vuln
 # B25038: Tenure by year householder moved into unit — Phase 4.2 owner-vuln
+# (owner cost burden already comes via tract-level B25140 in ct2020_spec_A)
 dir.create(file.path(here("data", "nhgis", "blockgroup", "bg2020")),
            recursive = TRUE)
 bg2020_spec <- ds_spec(vintages$acs_5yr_recent,
@@ -122,8 +122,8 @@ bg2020_spec <- ds_spec(vintages$acs_5yr_recent,
                                        "B25063",
                                        "B25075",
                                        "B19001",
-                                       "B25091",
-                                       "B25038"),
+                                       "B25038"),  # Phase 4.2 owner-vuln
+
                        geog_levels = c("blck_grp"))
 define_extract_nhgis(
   description = "2020 socioeconomic data for Kentucky",

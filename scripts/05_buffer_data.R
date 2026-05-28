@@ -216,6 +216,16 @@ bg_data <- pop_change %>%
          foreclosure_rate =
            if_else(owners_20_bg > 0,
                    1000 * foreclosure_n / owners_20_bg,
+                   NA_real_),
+         # Phase 4.2b.3 — B25038-derived owner long-tenure rate. Share of
+         # owner-occupied households whose householder moved in >= 10 years
+         # ago (mid-window of the 2020-2024 ACS). Uses B25038's own
+         # owner-occupied denominator (owners_b25038_20), which tracks
+         # owner-occupants of the surveyed universe — close to but not
+         # identical to HH_20 - renters_20 (which is derived from B25003).
+         owner_longtenure_p =
+           if_else(owners_b25038_20 > 0,
+                   owner_longtenure_n_20 / owners_b25038_20,
                    NA_real_))
 
 # Validation ---------------------------------------------------------------
@@ -244,3 +254,7 @@ check_not_all_na(bg_data, "mls_price_growth", "error")
 check_na_share(bg_data, "mls_price_growth", 0.5, "warn")
 check_not_all_na(bg_data, "foreclosure_rate", "error")
 check_range(bg_data, "foreclosure_rate", 0, 500, "warn")
+# B25038-derived owner long-tenure rate (Phase 4.2b.3); requires the bg2020
+# extract to include B25038. owner_longtenure_p is a share in [0, 1].
+check_not_all_na(bg_data, "owner_longtenure_p", "error")
+check_range(bg_data, "owner_longtenure_p", 0, 1, "warn")

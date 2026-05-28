@@ -179,7 +179,14 @@ ct_data <- local_area_ct %>%
                                               NA_real_),
          cyclomedia_prob_per_1000hu = if_else(cyclomedia_hu > 0,
                                               1000 * cyclomedia_prob_n / cyclomedia_hu,
-                                              NA_real_))
+                                              NA_real_),
+         # Phase 4.2b.3 — owner cost burden derived from existing B25140
+         # cells (own_burden30_20_ct = AUXKE003+AUXKE007, owner_20_ct =
+         # AUXKE002+AUXKE006), mirroring cost_burden30_20_p. No new data
+         # required — the cells are already in ct2020.
+         owner_costburden_p = if_else(owner_20_ct > 0,
+                                      own_burden30_20_ct / owner_20_ct,
+                                      NA_real_))
 
 # Join BG data and create rank variables for risk assessment
 
@@ -234,7 +241,13 @@ bg_ct_data <- BGxCT %>%
          rank_hmda_denial = rank(hmda_denial_rate, na.last = "keep"),
          rank_hmda_denial = ceiling(rank_hmda_denial/max(rank_hmda_denial, na.rm = T)*100),
          rank_cyclomedia = rank(cyclomedia_prob_per_1000hu, na.last = "keep"),
-         rank_cyclomedia = ceiling(rank_cyclomedia/max(rank_cyclomedia, na.rm = T)*100))
+         rank_cyclomedia = ceiling(rank_cyclomedia/max(rank_cyclomedia, na.rm = T)*100),
+         # Phase 4.2b.3 — owner-vulnerability ranks for the tenure-aware
+         # owner risk filter (cost burden tract-level; long-tenure BG-level).
+         rank_owner_costburden = rank(owner_costburden_p, na.last = "keep"),
+         rank_owner_costburden = ceiling(rank_owner_costburden/max(rank_owner_costburden, na.rm = T)*100),
+         rank_owner_longtenure = rank(owner_longtenure_p, na.last = "keep"),
+         rank_owner_longtenure = ceiling(rank_owner_longtenure/max(rank_owner_longtenure, na.rm = T)*100))
 
 # Validation ---------------------------------------------------------------
 validation_banner("Stage 06 — tract data & ranks")
@@ -252,6 +265,8 @@ rank_cols <- c("rank_renter_p", "rank_housing_tight", "rank_hh_growth",
                # Phase 4.2b.2 — new ranks for tenure-aware risk (Goal #4).
                "rank_permits_new", "rank_permits_renov", "rank_permits_demo",
                "rank_mls_growth", "rank_foreclosure",
-               "rank_hmda_denial", "rank_cyclomedia")
+               "rank_hmda_denial", "rank_cyclomedia",
+               # Phase 4.2b.3 — owner-vulnerability ranks.
+               "rank_owner_costburden", "rank_owner_longtenure")
 for (rc in rank_cols) check_not_all_na(bg_ct_data, rc, severity = "error")
 for (rc in rank_cols) check_range(bg_ct_data, rc, 1, 100, severity = "warn")

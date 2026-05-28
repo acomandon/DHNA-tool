@@ -211,12 +211,35 @@ rm(bg2010)
 nhgis_2020_bg <- list.files(here("data", "nhgis", "blockgroup", "bg2020"),
                             full.names = TRUE)
 
-bg2020 <- read_nhgis(nhgis_2020_bg) %>%
+bg2020_main <- read_nhgis(nhgis_2020_bg)
+
+# Phase 4.2b.3 — B25038 (tenure by year moved in) for owner long-tenure.
+# If the main bg2020 extract pre-dates B25038 being added to bg2020_spec,
+# the user can run scripts/fetch_b25038.R to pull just B25038 into
+# data/nhgis/blockgroup/bg2020_supp/. Join it here so downstream code can
+# reference AUVSE* either way.
+supp_dir <- here("data", "nhgis", "blockgroup", "bg2020_supp")
+if (!"AUVSE002" %in% colnames(bg2020_main) && dir.exists(supp_dir)) {
+  supp_files <- list.files(supp_dir, full.names = TRUE)
+  if (length(supp_files) > 0) {
+    bg2020_supp <- read_nhgis(supp_files) %>%
+      select(GISJOIN, starts_with("AUVS"))
+    bg2020_main <- left_join(bg2020_main, bg2020_supp, by = "GISJOIN")
+  }
+}
+
+bg2020 <- bg2020_main %>%
   mutate(pop_asian = AUPFE006+AUPFE007,
          pop_other = AUPFE008+AUPFE009,
          adult_less_than_HS = rowSums(across(AUQ8E002:AUQ8E016)),
          adult_college_above = rowSums(across(AUQ8E022:AUQ8E025)),
          HH = AUUDE002,
+         # Phase 4.2b.3 — B25038 owner long-tenure: owners who moved in
+         # 2010-2014, 2000-2009, 1990-1999, or 1989-earlier (>= ~10 yrs
+         # by mid-window of the 2020-2024 ACS). Requires B25038 in the
+         # bg2020_spec extract; re-run data_downloader.R if AUVSE005
+         # is missing.
+         owner_longtenure_n = AUVSE005+AUVSE006+AUVSE007+AUVSE008,
          GEOID = str_extract(GEO_ID, "(?<=S).*")) %>%
   rename(pop = AUPFE001,
          adult_over25 = AUQ8E001,
@@ -226,6 +249,7 @@ bg2020 <- read_nhgis(nhgis_2020_bg) %>%
          pop_indigenous = AUPFE005,
          HU = AUUDE001,
          HU_vacant = AUUDE003,
+         owner_occ_total = AUVSE002,   # Phase 4.2b.3 — B25038 denominator
          rent_HU = AUWFE001,
          rent_0  = AUWFE027,
          rent_100  =  AUWFE003,

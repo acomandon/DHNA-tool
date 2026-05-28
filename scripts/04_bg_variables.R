@@ -166,7 +166,11 @@ nhood_vars20_s <- local_area %>%
             HU_vacant_20 = sum(HU_vacant),
             HH_20 = sum(HH),
             hi_inc_hh_20 = sum(hi_inc_hh),
-            lo_inc_hh_20 = sum(lo_inc_hh))
+            lo_inc_hh_20 = sum(lo_inc_hh),
+            # Phase 4.2b.3 — B25038-derived owner long-tenure (num/denom
+            # summed across the local-area BGs; rate computed in stage 05).
+            owners_b25038_20      = sum(owner_occ_total),
+            owner_longtenure_n_20 = sum(owner_longtenure_n))
 
 # Validation ---------------------------------------------------------------
 validation_banner("Stage 04 — block-group variables")
