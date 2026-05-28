@@ -215,7 +215,26 @@ bg_ct_data <- BGxCT %>%
          rank_HV = rank((median_hv_20-median_hv_10)/median_hv_10, na.last = "keep"),
          rank_HV = ceiling(rank_HV/max(rank_HV, na.rm = T)*100),
          rank_permits = rank(permits_N, na.last = "keep"),
-         rank_permits = ceiling(rank_permits/max(rank_permits, na.rm = T)*100))
+         rank_permits = ceiling(rank_permits/max(rank_permits, na.rm = T)*100),
+         # Phase 4.2b.2 — new ranks for tenure-aware risk (Goal #4).
+         # Permit-type splits (BG-level via stage 05).
+         rank_permits_new = rank(permits_new_N, na.last = "keep"),
+         rank_permits_new = ceiling(rank_permits_new/max(rank_permits_new, na.rm = T)*100),
+         rank_permits_renov = rank(permits_renov_N, na.last = "keep"),
+         rank_permits_renov = ceiling(rank_permits_renov/max(rank_permits_renov, na.rm = T)*100),
+         rank_permits_demo = rank(permits_demo_N, na.last = "keep"),
+         rank_permits_demo = ceiling(rank_permits_demo/max(rank_permits_demo, na.rm = T)*100),
+         # MLS price growth + foreclosure rate (BG-level via stage 05).
+         rank_mls_growth = rank(mls_price_growth, na.last = "keep"),
+         rank_mls_growth = ceiling(rank_mls_growth/max(rank_mls_growth, na.rm = T)*100),
+         rank_foreclosure = rank(foreclosure_rate, na.last = "keep"),
+         rank_foreclosure = ceiling(rank_foreclosure/max(rank_foreclosure, na.rm = T)*100),
+         # HMDA mortgage-denial rate + Cyclomedia condition rate (tract-level
+         # via ct_data; Cyclomedia has partial BG coverage by design).
+         rank_hmda_denial = rank(hmda_denial_rate, na.last = "keep"),
+         rank_hmda_denial = ceiling(rank_hmda_denial/max(rank_hmda_denial, na.rm = T)*100),
+         rank_cyclomedia = rank(cyclomedia_prob_per_1000hu, na.last = "keep"),
+         rank_cyclomedia = ceiling(rank_cyclomedia/max(rank_cyclomedia, na.rm = T)*100))
 
 # Validation ---------------------------------------------------------------
 validation_banner("Stage 06 — tract data & ranks")
@@ -229,6 +248,10 @@ check_na_share(bg_ct_data, "cyclomedia_prob_per_1000hu", 0.3, "warn")  # partial
 # Every rank feeds classify_risk(); an all-NA rank silently disables a criterion.
 rank_cols <- c("rank_renter_p", "rank_housing_tight", "rank_hh_growth",
                "rank_vacant_ch", "rank_college", "rank_hhinc", "rank_hi_inc",
-               "rank_lo_inc", "rank_rents", "rank_rents2", "rank_HV", "rank_permits")
+               "rank_lo_inc", "rank_rents", "rank_rents2", "rank_HV", "rank_permits",
+               # Phase 4.2b.2 — new ranks for tenure-aware risk (Goal #4).
+               "rank_permits_new", "rank_permits_renov", "rank_permits_demo",
+               "rank_mls_growth", "rank_foreclosure",
+               "rank_hmda_denial", "rank_cyclomedia")
 for (rc in rank_cols) check_not_all_na(bg_ct_data, rc, severity = "error")
 for (rc in rank_cols) check_range(bg_ct_data, rc, 1, 100, severity = "warn")

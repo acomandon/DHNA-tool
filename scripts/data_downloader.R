@@ -103,7 +103,7 @@ define_extract_nhgis(
   wait_for_extract() %>%
   download_extract(download_dir = paste0(dl_path, "/bg2010"))
 
-# 2019-2023 block group data 
+# 2019-2023 block group data
 # Tables
 # B03002: Hispanic or Latino by Race
 # B15003: Educational attainment for people over 25 years old
@@ -111,7 +111,9 @@ define_extract_nhgis(
 # B25063: Median Gross rent
 # B25075: Home value
 # B19001: Household income
-dir.create(file.path(here("data", "nhgis", "blockgroup", "bg2020")), 
+# B25091: Mortgage status by SMOCAPI (owner cost burden) — Phase 4.2 owner-vuln
+# B25038: Tenure by year householder moved into unit — Phase 4.2 owner-vuln
+dir.create(file.path(here("data", "nhgis", "blockgroup", "bg2020")),
            recursive = TRUE)
 bg2020_spec <- ds_spec(vintages$acs_5yr_recent,
                        data_tables = c("B03002",
@@ -119,7 +121,9 @@ bg2020_spec <- ds_spec(vintages$acs_5yr_recent,
                                        "B25002",
                                        "B25063",
                                        "B25075",
-                                       "B19001"),
+                                       "B19001",
+                                       "B25091",
+                                       "B25038"),
                        geog_levels = c("blck_grp"))
 define_extract_nhgis(
   description = "2020 socioeconomic data for Kentucky",

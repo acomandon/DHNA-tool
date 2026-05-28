@@ -199,7 +199,24 @@ bg_data <- pop_change %>%
          hi_inc_ch_pop = hi_inc_hh_20-hi_inc_hh_10,
          lo_inc_ch = (lo_inc_hh_20/HH_20)-(lo_inc_hh_10/HH_10),
          lo_inc_ch_pop = lo_inc_hh_20-lo_inc_hh_10,
-         hhinc_ch = (median_hhinc_20-median_hhinc_10)/median_hhinc_10)
+         hhinc_ch = (median_hhinc_20-median_hhinc_10)/median_hhinc_10) %>%
+  # Phase 4.2b.2 — derived rates for tenure-aware risk (Goal #4).
+  # owners_20_bg = BG-level owner-occupants (the ct_data owner_20_ct lives
+  # at tract level; BG-level renters comes from nhood_vars20_s).
+  # mls_price_growth: 2019 -> 2021 (data is sparse for 2022-2023 in the
+  # current 50k-row export; cities deploying for real should refresh MLS
+  # with full year coverage and extend this to 2019 -> 2023).
+  # foreclosure_rate: per 1000 BG-level owner-occupants.
+  mutate(owners_20_bg = HH_20 - renters_20,
+         mls_price_growth =
+           if_else(!is.na(mls_median_price_2019) & !is.na(mls_median_price_2021)
+                   & mls_median_price_2019 > 0,
+                   (mls_median_price_2021 - mls_median_price_2019) / mls_median_price_2019,
+                   NA_real_),
+         foreclosure_rate =
+           if_else(owners_20_bg > 0,
+                   1000 * foreclosure_n / owners_20_bg,
+                   NA_real_))
 
 # Validation ---------------------------------------------------------------
 validation_banner("Stage 05 — buffer data")
@@ -221,3 +238,9 @@ check_not_all_na(bg_data, "foreclosure_n",        "error")
 check_not_all_na(bg_data, "permits_new_N",        "error")
 check_not_all_na(bg_data, "permits_renov_N",      "error")
 check_not_all_na(bg_data, "permits_demo_N",       "warn")  # rarer; not all BGs see demos
+# Derived rates (Phase 4.2b.2). MLS growth NA-share is high — many BGs lack
+# both 2019 and 2021 median prices; we tolerate up to 50% NA.
+check_not_all_na(bg_data, "mls_price_growth", "error")
+check_na_share(bg_data, "mls_price_growth", 0.5, "warn")
+check_not_all_na(bg_data, "foreclosure_rate", "error")
+check_range(bg_data, "foreclosure_rate", 0, 500, "warn")
