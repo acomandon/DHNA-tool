@@ -38,12 +38,40 @@ params <- list(
 )
 
 # Administrative data feeds -------------------------------------------------
-# Louisville Metro administrative exports (permits, Housing Trust Fund) that
-# roll forward with each refresh. Drop the new export into the matching
-# subfolder under data/administrative/ and bump the filename here.
+# Louisville Metro administrative exports (permits, Housing Trust Fund, MLS,
+# foreclosures, HMDA) that roll forward with each refresh. Drop the new
+# export into the matching subfolder under data/administrative/ and bump
+# the filename here.
 admin <- list(
-  permits_csv = "active_construction_permits_5798371747874481478.csv",
-  htf_csv     = "Louisville_Metro_KY_-__ARP-0023_Louisville_Affordable_Housing_Trust_Fund.csv"
+  permits_csv      = "active_construction_permits_5798371747874481478.csv",
+  htf_csv          = "Louisville_Metro_KY_-__ARP-0023_Louisville_Affordable_Housing_Trust_Fund.csv",
+  # Goal #4 Phase 4.2 — tenure-aware risk model adds three administrative feeds:
+  mls_csv          = "GIS_MLS_2019to2023_KY_Louisville.csv",            # data/administrative/MLS/
+  foreclosures_csv = "GIS_JEFFCOMM_2023 Foreclosure Sales Results.csv", # data/administrative/foreclosures/
+  hmda_xlsx        = "HMDA_Denials_KY_Louisville_2020-2022.xlsx",       # data/administrative/HMDA/
+  hmda_sheet       = "2022_calc",        # 2020-vintage tract IDs; pooling 2020-2021 deferred (different tract vintage)
+  hmda_year_label  = "2022"
+)
+
+# Optional locality-specific data slots --------------------------------------
+# Each slot is either NULL (the city does not have this data; the classifier
+# treats the corresponding indicator as absent and falls through) or a list
+# with the file path + relevant column names. Goal #4 Phase 4.2 / Goal #5.
+# Louisville status as of 2026-05-28:
+#   - evictions: NULL (data not on hand; will be added when sourced)
+#   - windshield_survey: populated (Cyclomedia tract-aggregated; Phase I
+#       fully covered, Phase II partial)
+#   - assessor: NULL (no PVA per-BG assessment-growth feed available)
+optional_data <- list(
+  evictions         = NULL,
+  windshield_survey = list(
+    # under data/administrative/Property Conditions Survey/
+    csv       = "GIS_Property Condition Survey Data_tract.csv",
+    geoid     = "GEOID",
+    num_col   = "SurveyCount",      # problematic-unit count (numerator)
+    denom_col = "HousingUnits21"    # housing-unit base (denominator for rate)
+  ),
+  assessor          = NULL
 )
 
 # HUD AFFH-T release --------------------------------------------------------

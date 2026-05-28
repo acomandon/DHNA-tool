@@ -64,6 +64,77 @@ bg_permits <- st_join(lvm_bg_popctr_buffer, build_permits,
   group_by(GISJOIN_proj) %>%
   summarize(permits_N = n()) %>%
   ungroup()
+
+# Goal #4 Phase 4.2 — permit-type split. Re-read the file unfiltered so we
+# can pick up Wrecking Permits (excluded from build_permits's Residential*
+# filter) for the demolition bucket. HVAC / Electrical / PoolSpa are dropped
+# (service activity, not development pressure). The aggregated permits_N
+# above is preserved for byte-identical classifier output during 4.2b.1.
+build_permits_split <- read_csv(here("data", "administrative", "permits",
+                                     admin$permits_csv)) %>%
+  filter(!is.na(LATITUDE), !is.na(LONGITUDE)) %>%
+  mutate(permit_class = case_when(
+    PERMIT_TYPE == "Residential New"                                ~ "new",
+    PERMIT_TYPE %in% c("Residential Alteration",
+                       "Residential Addition")                      ~ "renov",
+    PERMIT_TYPE == "Wrecking Permit"                                ~ "demo",
+    TRUE                                                            ~ NA_character_
+  )) %>%
+  filter(!is.na(permit_class)) %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs = 4326) %>%
+  st_transform(crs = params$permit_buffer_crs)
+bg_permits_split <- st_join(lvm_bg_popctr_buffer, build_permits_split,
+                            join = st_intersects) %>%
+  st_drop_geometry() %>%
+  filter(!is.na(permit_class)) %>%
+  group_by(GISJOIN_proj, permit_class) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  pivot_wider(id_cols = GISJOIN_proj,
+              names_from = permit_class,
+              values_from = n,
+              names_glue = "permits_{permit_class}_N",
+              values_fill = 0)
+
+# Goal #4 Phase 4.2 — MLS sales (GLAR) within the 800m buffer. The current
+# export is capped at 50,000 rows and is heavily truncated for 2022-2023
+# (~312 / 129 vs ~16k each year through 2021), so usable signal is mostly
+# 2019-2021. Cities deploying for real should refresh this with full
+# year coverage.
+mls_sales <- read_csv(here("data", "administrative", "MLS", admin$mls_csv)) %>%
+  filter(!is.na(LATITUDE), !is.na(LONGITUDE)) %>%
+  rename(sale_price = `Sold Price`, year_sold = YearSold) %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs = 4326) %>%
+  st_transform(crs = params$permit_buffer_crs)
+bg_mls <- st_join(lvm_bg_popctr_buffer, mls_sales, join = st_intersects) %>%
+  st_drop_geometry() %>%
+  filter(!is.na(year_sold)) %>%
+  group_by(GISJOIN_proj, year_sold) %>%
+  summarise(mls_n            = n(),
+            mls_median_price = median(sale_price, na.rm = TRUE),
+            .groups          = "drop") %>%
+  pivot_wider(id_cols     = GISJOIN_proj,
+              names_from  = year_sold,
+              values_from = c(mls_n, mls_median_price),
+              names_glue  = "{.value}_{year_sold}")
+
+# Goal #4 Phase 4.2 — Foreclosure sales within the 800m buffer. Source
+# addresses live in admin$foreclosures_csv; geocoding is done out of
+# band by scripts/geocode_foreclosures.R and cached to data/processed/.
+foreclosures_geo_path <- here("data", "processed", "foreclosures_geocoded.csv")
+if (!file.exists(foreclosures_geo_path)) {
+  stop("Foreclosures cache missing: ", foreclosures_geo_path,
+       "\nRun `source(here::here(\"scripts\", \"geocode_foreclosures.R\"))` once to generate it.",
+       call. = FALSE)
+}
+foreclosures <- read_csv(foreclosures_geo_path) %>%
+  filter(!is.na(lat), !is.na(long)) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4326) %>%
+  st_transform(crs = params$permit_buffer_crs)
+bg_foreclosures <- st_join(lvm_bg_popctr_buffer, foreclosures,
+                           join = st_intersects) %>%
+  st_drop_geometry() %>%
+  group_by(GISJOIN_proj) %>%
+  summarise(foreclosure_n = sum(!is.na(sale_date)), .groups = "drop")
 # Affordable units: the existing NHPD-based dataset plus the latest Louisville
 # ARP-funded Housing Trust Fund projects (admin$htf_csv). ARP rows are treated
 # as always active (EndDate_Ye = 9999) so they pass the EndDate cutoff filter
@@ -98,7 +169,19 @@ bg_data <- pop_change %>%
   left_join(., nhood_vars20_s) %>%
   left_join(., rent_buffer_wide) %>%
   left_join(., bg_permits) %>%
+  left_join(., bg_permits_split) %>%
+  left_join(., bg_mls) %>%
+  left_join(., bg_foreclosures) %>%
   left_join(., bg_ah) %>%
+  # Phase 4.2b.1 — BGs absent from a count-aggregation table left-join in as
+  # NA; convert to 0 (a BG with no MLS / foreclosure / split-permit hit
+  # genuinely has zero, not missing data). Median-price stays NA when there
+  # are no sales (no defined median).
+  mutate(across(any_of(c("permits_new_N", "permits_renov_N", "permits_demo_N",
+                         "foreclosure_n",
+                         "mls_n_2019", "mls_n_2020", "mls_n_2021",
+                         "mls_n_2022", "mls_n_2023")),
+                ~ replace_na(., 0L))) %>%
   mutate(vacancy_Ch = (HU_vacant_20/HU_20)-
            (HU_vacant_10/HU_10),
          HH_ch = HH_20 - HH_10,
@@ -126,3 +209,15 @@ check_rows_equal(bg_data, "bg_data", nrow(pop_change), "pop_change")
 check_na_share(bg_data, "renter_p_ch", 0.8, "warn")
 check_na_share(bg_data, "college_edu", 0.8, "warn")
 check_na_share(bg_data, "hhinc_ch", 0.8, "warn")
+
+# Phase 4.2b.1 — new admin data ingestion checkpoints.
+# Sources: MLS (GLAR), foreclosure sales (geocoded), permit-type split.
+check_min_rows(mls_sales, "mls_sales (point sf)", 30000, "error")
+check_min_rows(foreclosures, "foreclosures (geocoded)", 300, "error")
+check_not_all_na(bg_data, "mls_n_2019",           "error")
+check_not_all_na(bg_data, "mls_n_2021",           "error")
+check_not_all_na(bg_data, "mls_median_price_2019","error")
+check_not_all_na(bg_data, "foreclosure_n",        "error")
+check_not_all_na(bg_data, "permits_new_N",        "error")
+check_not_all_na(bg_data, "permits_renov_N",      "error")
+check_not_all_na(bg_data, "permits_demo_N",       "warn")  # rarer; not all BGs see demos

@@ -46,6 +46,34 @@ hud_tract <- read_csv(here("data", "prepackaged", "hud", hud_affh$folder,
          county_name == locality$county_name) %>%
   select(geoid, hh_tot_1_m_hus_pb, hh_tot_husholds)
 
+# Goal #4 Phase 4.2 — HMDA mortgage applications + denials by tract.
+# The "2022_calc" sheet is in 2020-vintage tract IDs (matches our pipeline).
+# Pooling 2020-2021 from "2020-2021_calc" would require a tract crosswalk
+# (deferred — those rows use 2010-vintage tract IDs).
+hmda_tract <- readxl::read_excel(
+  here("data", "administrative", "HMDA", admin$hmda_xlsx),
+  sheet = admin$hmda_sheet) %>%
+  transmute(GEOID_CT     = as.character(GEOID),
+            hmda_apps    = MortgageApp_2022,
+            hmda_denials = Denials_2022)
+
+# Goal #4 Phase 4.2 — Optional windshield-survey slot (Cyclomedia tract-
+# aggregated property conditions for Louisville; NULL for other cities).
+# We carry numerator + denominator and compute the rate post-summarise so
+# the local-area aggregation is properly weighted by housing units.
+if (!is.null(optional_data$windshield_survey)) {
+  ws_cfg <- optional_data$windshield_survey
+  cyclomedia_tract <- read_csv(
+    here("data", "administrative", "Property Conditions Survey", ws_cfg$csv)) %>%
+    transmute(GEOID_CT          = as.character(.data[[ws_cfg$geoid]]),
+              cyclomedia_prob_n = .data[[ws_cfg$num_col]],
+              cyclomedia_hu     = .data[[ws_cfg$denom_col]])
+} else {
+  cyclomedia_tract <- tibble(GEOID_CT          = character(0),
+                             cyclomedia_prob_n = numeric(0),
+                             cyclomedia_hu     = numeric(0))
+}
+
 nhgis_2020_ct <- list.files(here("data", "nhgis", "tract", "ct2020"),
                             full.names = TRUE)
 
@@ -136,10 +164,22 @@ ct_data <- local_area_ct %>%
   left_join(., hud_housing, by = join_by(GEOID_CT == geoid)) %>%
   left_join(., hud_tract, by = join_by(GEOID_CT == geoid)) %>%
   left_join(., rent_fmi20_ct) %>%
+  left_join(., hmda_tract) %>%
+  left_join(., cyclomedia_tract) %>%
   group_by(GISJOIN_proj) %>%
   summarise(across(where(is.double), ~sum(.x, na.rm = TRUE))) %>%
   mutate(cost_burden30_20_p = cost_burden30_20_ct/burden_HH_20_ct,
-         cost_burden50_20_p = cost_burden50_20_ct/burden_HH_20_ct)
+         cost_burden50_20_p = cost_burden50_20_ct/burden_HH_20_ct,
+         # Phase 4.2b.1 — local-area rates computed post-summarise so the
+         # aggregation across tracts is properly weighted (sum of num /
+         # sum of denom). NA when the BG's local-area tracts had no apps
+         # / no surveyed units.
+         hmda_denial_rate           = if_else(hmda_apps > 0,
+                                              hmda_denials / hmda_apps,
+                                              NA_real_),
+         cyclomedia_prob_per_1000hu = if_else(cyclomedia_hu > 0,
+                                              1000 * cyclomedia_prob_n / cyclomedia_hu,
+                                              NA_real_))
 
 # Join BG data and create rank variables for risk assessment
 
@@ -181,6 +221,11 @@ bg_ct_data <- BGxCT %>%
 validation_banner("Stage 06 — tract data & ranks")
 # CT-level burden joined onto BGs; low coverage means the BG<->CT join broke.
 check_na_share(bg_ct_data, "cost_burden30_20_p", 0.8, "warn")
+# Phase 4.2b.1 — new tract-level inputs (HMDA tract IDs match 2020 vintage;
+# Cyclomedia is partial-coverage Phase I + Phase II in progress).
+check_not_all_na(bg_ct_data, "hmda_denial_rate", "error")
+check_range(bg_ct_data, "hmda_denial_rate", 0, 1, "warn")
+check_na_share(bg_ct_data, "cyclomedia_prob_per_1000hu", 0.3, "warn")  # partial coverage expected
 # Every rank feeds classify_risk(); an all-NA rank silently disables a criterion.
 rank_cols <- c("rank_renter_p", "rank_housing_tight", "rank_hh_growth",
                "rank_vacant_ch", "rank_college", "rank_hhinc", "rank_hi_inc",

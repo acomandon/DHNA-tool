@@ -12,6 +12,7 @@
 library(ipumsr)
 library(data.table)
 library(tidyverse)
+library(readxl)
 library(tidycensus)
 library(tidygeocoder)
 library(purrr)
