@@ -13,48 +13,69 @@ mod_location_ui <- function(id) {
   ns <- NS(id)
   nav_panel(
     "Location", value = "location",
-    p("Start by telling us what kind of project this is. The tool's assessment
-              differs between rental and ownership projects (mixed-tenure
-              projects are coming in a future release)."),
-    radioButtons(ns("tenure"), "Project type",
-                 choices = c("Rental" = "rental",
-                             "Homeownership" = "ownership"),
-                 selected = "rental",
-                 inline = TRUE),
-    p("Project can have different impacts based on where they are located.
-              Please, enter information about where the project will be located."),
-    numericInput(ns("proj_size"), "Number of units in proposed project",
-                 value = 0),
-    conditionalPanel(
-      condition = "input.proj_size > 0", ns = ns,
-      selectInput(ns("build_type"), "Housing type",
-                  c("Single-Family Home" = "sfh",
-                    "Multi-Family Home" = "mfh"),
-                  selected = 'mfh')
-    ),
-    conditionalPanel(
-      condition = "input.build_type == 'sfh' & input.proj_size > 1", ns = ns,
-      selectInput(ns("scattered_sites"),
-                  "Will the homes be scattered across multiple locations",
-                  c("Yes, each home is in a distinct location" = "yes",
-                    "No, the homes are all within the same block" = "no"),
-                  selected = "no")
-    ),
-    htmlOutput(ns("Scattered_site_response")),
+    layout_columns(
+      fill = TRUE,
+      col_widths = 12,
+      card(full_screen = FALSE,
+           card_header("Project location"),
 
-    p("Please, provide the location of your project with an address
-              or directly on the map"),
-    textInput(ns("address"), "Address:"),
-    textInput(ns("city"), "City:"),
-    textInput(ns("zip"), "Zip:"),
-    actionButton(ns("geocode"), "Geocode address"),
-    leafletOutput(ns("map")),
-    actionButton(ns("use_clik_loc"), "Confirm location"),
-    textOutput(ns("valid_loc_text")),
-    conditionalPanel(
-      condition = "output.valid_loc_text == 'Your selected location and project information have been recorded' && input.proj_size > 0",
-      ns = ns,
-      actionButton(ns("valid_loc_btn"), "next page"))
+           layout_sidebar(
+             open = TRUE,
+             fillable = TRUE,
+
+             sidebar = sidebar(
+               width = 400,
+
+               p("Start by telling us what kind of project this is. The
+                 tool's assessment differs between rental and ownership
+                 projects (mixed-tenure projects are coming in a future
+                 release)."),
+               radioButtons(ns("tenure"), "Project type",
+                            choices = c("Rental" = "rental",
+                                        "Homeownership" = "ownership"),
+                            selected = "rental",
+                            inline = TRUE),
+               p("Projects can have different impacts based on where they
+                 are located. Please, enter information about where the
+                 project will be located."),
+               numericInput(ns("proj_size"),
+                            "Number of units in proposed project",
+                            value = 0),
+               conditionalPanel(
+                 condition = "input.proj_size > 0", ns = ns,
+                 selectInput(ns("build_type"), "Housing type",
+                             c("Single-Family Home" = "sfh",
+                               "Multi-Family Home" = "mfh"),
+                             selected = 'mfh')
+               ),
+               conditionalPanel(
+                 condition = "input.build_type == 'sfh' & input.proj_size > 1",
+                 ns = ns,
+                 selectInput(ns("scattered_sites"),
+                             "Will the homes be scattered across multiple locations",
+                             c("Yes, each home is in a distinct location" = "yes",
+                               "No, the homes are all within the same block" = "no"),
+                             selected = "no")
+               ),
+               htmlOutput(ns("Scattered_site_response")),
+
+               p("Please, provide the location of your project with an
+                 address or directly on the map."),
+               textInput(ns("address"), "Address:"),
+               textInput(ns("city"), "City:"),
+               textInput(ns("zip"), "Zip:"),
+               actionButton(ns("geocode"), "Geocode address"),
+               actionButton(ns("use_clik_loc"), "Confirm location"),
+               textOutput(ns("valid_loc_text")),
+               conditionalPanel(
+                 condition = "output.valid_loc_text == 'Your selected location and project information have been recorded' && input.proj_size > 0",
+                 ns = ns,
+                 actionButton(ns("valid_loc_btn"), "next page"))
+             ),
+
+             leafletOutput(ns("map"), height = "70vh")
+           ))
+    )
   )
 }
 
@@ -118,7 +139,11 @@ mod_location_server <- function(id, lvm_bg_geo) {
       bindEvent(input$use_clik_loc)
 
     valid_loc <- eventReactive(input$use_clik_loc, {
-      if (is.na(bg_id()) == FALSE & input$proj_size > 0) {
+      if (input$build_type == "sfh" & input$proj_size > 1 &
+          input$scattered_sites == "yes") {
+        "This tool cannot evaluate scattered-site projects. Please contact the office of housing."
+      }
+      else if (is.na(bg_id()) == FALSE & input$proj_size > 0) {
         "Your selected location and project information have been recorded"
       }
       else if ((is.na(bg_id()) == FALSE & input$proj_size < 1)) {
@@ -135,10 +160,10 @@ mod_location_server <- function(id, lvm_bg_geo) {
 
     output$Scattered_site_response <- renderText({
       if (input$scattered_sites == "yes" & input$build_type == "sfh") {
-        paste("<br> <em>This tool can only process one location at a time. Please, contact the office of housing for scattered site developments.</em> <br>", "<br>", "<br>")
+        "<em>This tool can only process one location at a time. Please, contact the office of housing for scattered site developments.</em>"
       }
       else if (input$scattered_sites == "no" & input$build_type == "sfh") {
-        paste("<br> <em>Please, enter the address of one of the homes and the tool will treat the project as a cluster of homes.</em> <br>", "<br>", "<br>")
+        "<em>Please, enter the address of one of the homes and the tool will treat the project as a cluster of homes.</em>"
       }
       else {
         ""
