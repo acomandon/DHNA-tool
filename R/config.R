@@ -69,7 +69,43 @@ hud_for_sale <- list(
   new_construction = c(332000L, 425000L, 515000L, 637000L)
 )
 
+# Risk classifier thresholds ------------------------------------------------
+# Consumed by `classify_risk()` in R/risk_classifier.R. Two flavors:
+#   1. Percentile-rank thresholds (operate on rank_* fields, which are
+#      integer percentiles in 1..100 — see scripts/06_tract_data.R).
+#   2. Locality-calibrated dollar/count thresholds (Louisville-tuned;
+#      retune when retargeting to another metro).
+# The classifier's rule structure is fixed for Phase 4.1 — only the
+# constants live here. Phase 4.2 will revisit the rules themselves.
+risk_params <- list(
+  # Vulnerability filter (keeps lower-income 2010 BGs)
+  med_hhinc_10_max       = 47000,   # 2010 median household income ceiling
+  renters_n_min          = 300,     # renter-count split for low-N flag
+
+  # Sample-size gate for owner-side signals
+  owners_n_min           = 500,
+
+  # Percentile-rank thresholds (rank_* values are integer percentiles 1..100)
+  q4_cutoff              = 79,      # top-quintile boundary (> q4 = top; <= q4 = below)
+  q1_cutoff              = 21,      # bottom-quintile boundary (< q1 = bottom)
+  above_med              = 59,      # above-median band with margin
+  below_med              = 41,      # below-median band with margin
+  upper_half             = 49,      # upper-half cutoff
+
+  # "Expensive enough" gates (medium-tier vs high-tier income/rent split)
+  med_hhinc_20_threshold = 66000,
+  med_rent_20_threshold  = 1100,
+
+  # Demographic-change cutoffs
+  pop_change_min         = 0,       # `pop_change10_20 > 0`
+  black_change_abs_m     = -200,    # m2e: `black_change10_20 < -200`
+  black_change_abs_h     = 0,       # h2e: `black_change10_20 < 0`
+  black_change_pct_max   = -0.20,   # both: `blackpct_ch_00_20 < -0.20`
+
+  # Composite-indicator count threshold (m2/h2 both: `> 1`, i.e. >= 2 indicators)
+  composite_min_count    = 2
+)
+
 # Not yet absorbed into config (deferred):
 #   - HUD_FMI table (data_prep.R) — will move to data/prepackaged/hud_fmi.csv
-#   - Risk-classification thresholds (data_prep.R) — Goal #4 will overhaul
 #   - UI AMI dollar strings (DHNA/app.R) — derive from HUD_FMI once it is data
