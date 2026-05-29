@@ -131,7 +131,18 @@ risk_params <- list(
   black_change_pct_max   = -0.20,   # both: `blackpct_ch_00_20 < -0.20`
 
   # Composite-indicator count threshold (m2/h2 both: `> 1`, i.e. >= 2 indicators)
-  composite_min_count    = 2
+  composite_min_count    = 2,
+
+  # Phase 4.2b.3b — owner-side parameters for the tenure-aware classifier.
+  # Owner-vulnerability filter thresholds (shares in [0, 1]).
+  longtenure_min         = 0.50,    # >=50% of owners are long-tenure (moved in >=10y ago)
+  costburden_min         = 0.20,    # >=20% of owners cost-burdened (B25140)
+  hmda_denial_min        = 0.20,    # >=20% mortgage denial rate (vulnerability supplement)
+  # Owner "expensive enough" gate (parallel to med_hhinc_20_threshold +
+  # med_rent_20_threshold). Median home value cutoff that separates "past
+  # the transition" (medium-tier rules apply) from "still affordable but
+  # transitioning" (high-tier rules apply).
+  med_hv_20_threshold    = 200000
 )
 
 # Not yet absorbed into config (deferred):
