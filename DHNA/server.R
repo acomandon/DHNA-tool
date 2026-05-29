@@ -25,6 +25,7 @@ server <- function(input, output, session) {
 
   mod_area_overview_server("area",
                            bg_id = loc$bg_id,
+                           tenure = loc$tenure,
                            adat_data = adat_data,
                            pop = pop,
                            local_area = local_area,
