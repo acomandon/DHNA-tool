@@ -20,16 +20,7 @@ bg_ct_risk <- bg_ct_data %>%
       levels = c("low", "medium", "high")),
     risk_level_owner = factor(
       if_else(is.na(risk_level_owner), "low", as.character(risk_level_owner)),
-      levels = c("low", "medium", "high")),
-    # Phase 4.2b.3b TRANSITIONAL: keep a combined `risk_level` column as
-    # the max of (renter, owner) so the app's existing
-    # mod_affordability_rental + mod_affordability_ownership references
-    # to risk_level continue to work between this commit and 4.2b.4.
-    # 4.2b.4 wires the modules to risk_level_renter / risk_level_owner
-    # directly and drops this column.
-    risk_level = factor(
-      pmax(as.integer(risk_level_renter), as.integer(risk_level_owner)),
-      levels = 1:3, labels = c("low", "medium", "high"))
+      levels = c("low", "medium", "high"))
   )
 
 # Keep the data objects needed downstream plus every helper function (config
@@ -50,8 +41,7 @@ validation_banner("Stage 07 — risk classification & outputs")
 check_rows_equal(bg_ct_risk, "bg_ct_risk", nrow(bg_ct_data), "bg_ct_data")
 check_not_all_na(bg_ct_risk, "risk_level_renter")
 check_not_all_na(bg_ct_risk, "risk_level_owner")
-check_not_all_na(bg_ct_risk, "risk_level")
-for (col in c("risk_level_renter", "risk_level_owner", "risk_level")) {
+for (col in c("risk_level_renter", "risk_level_owner")) {
   shares <- prop.table(table(bg_ct_risk[[col]]))
   max_share <- max(shares)
   dhna_check(max_share < 0.99,

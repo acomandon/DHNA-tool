@@ -60,7 +60,7 @@ mod_affordability_rental_server <- function(id, bg_id, proj_size, adat_data) {
     recommendation_result <- reactive({
       req(input$submit)
       recommend_project_rental(
-        risk_level = area()$risk_level,
+        risk_level = area()$risk_level_renter,
         project_size = proj_size(),
         affordable_units = list(
           ami30 = input$affordable30, ami50 = input$affordable50,
