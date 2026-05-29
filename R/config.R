@@ -145,6 +145,25 @@ risk_params <- list(
   med_hv_20_threshold    = 200000
 )
 
+# Forecast modulator (Phase 4.4) --------------------------------------------
+# Regional BA+ employment-growth forecast from Phase 4.3 used as a
+# threshold modulator on the appreciation + expansion families. When the
+# LWA growth rate exceeds the baseline, the q4_cutoff (and the high end of
+# the middle band) is tightened regionally by:
+#   adjustment_ppt = max(0, min(max_adjustment_ppt,
+#                               (lwa_ba_growth_pct - baseline_pct) *
+#                                sensitivity * 100))
+# At Louisville's +9.35% (Kentuckiana Works LWA, 2022-2032), the
+# appreciation/expansion q4_cutoff drops from 79 to ~74.65. Composite,
+# distress, market-tightness, and vulnerability families keep static
+# thresholds. Forecast does not compete for dominant_family.
+forecast <- list(
+  lwa_ba_growth_pct  = 0.0935,   # Kentuckiana Works 2022-2032 BA+ entry-ed occupations
+  baseline_pct       = 0.05,
+  sensitivity        = 1.0,
+  max_adjustment_ppt = 10
+)
+
 # Not yet absorbed into config (deferred):
 #   - HUD_FMI table (data_prep.R) — will move to data/prepackaged/hud_fmi.csv
 #   - UI AMI dollar strings (DHNA/app.R) — derive from HUD_FMI once it is data

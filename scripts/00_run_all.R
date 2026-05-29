@@ -29,6 +29,7 @@ library(forcats)
 # Config and shared helpers -------------------------------------------------
 source(here("R", "config.R"))
 source(here("R", "bin_interpolation.R"))
+source(here("R", "risk_matrix.R"))
 source(here("R", "risk_classifier.R"))
 source(here("R", "validate.R"))
 

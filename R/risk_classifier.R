@@ -1,164 +1,256 @@
 # Tenure-aware rule-based displacement risk classifiers.
-# Sourced by scripts/00_run_all.R; called from scripts/07_risk.R.
+# Phase 4.4 — matrix-driven interpreter.
 #
-# Two parallel classifiers mirror the original m/h tier structure with
-# tenure-specific appreciation signals, vulnerability filters, and market
-# tightness. Thresholds live in `risk_params` in R/config.R.
+# Rule structure lives in R/risk_matrix.R (`risk_matrix`); threshold
+# constants in R/config.R (`risk_params`); regional forecast modulator in
+# R/config.R (`forecast`). The classifiers walk the matrix to produce
+# (tier, dominant_family) per BG.
 #
 # Outputs:
 #   classify_risk_renter(bg_ct_data) -> GISJOIN_proj +
-#     r_m1, r_m2, r_h1, r_h2, r_h3, r_hi_all, r_med_all, risk_level_renter
+#     risk_level_renter, dominant_family_renter
 #   classify_risk_owner(bg_ct_data)  -> GISJOIN_proj +
-#     o_m1, o_m2, o_h1, o_h2, o_h3, o_d1, o_hi_all, o_med_all, risk_level_owner
+#     risk_level_owner,  dominant_family_owner
 #
-# The owner side carries a parallel financial-distress track (o_d1, driven
-# by foreclosure rate) distinct from the gentrification-driven track
-# (o_m1, o_m2, o_h1, o_h2, o_h3). o_hi_all OR's them together.
+# Vulnerability filter: BGs that don't pass a tenure's gates fall through
+# to NA tier (handled as "low" downstream in scripts/07_risk.R, with
+# dominant_family = NA).
 #
-# Optional-slot columns (rank_evictions, rank_cyclomedia, rank_assess_growth)
-# are backfilled as NA when absent so rule code can reference them
-# unconditionally; their contribution drops out via the OR / `> threshold`
-# logic when NA.
+# Forecast modulator: when the LWA BA+ employment growth forecast exceeds
+# baseline, q4_cutoff (and the "high" end of any middle-band) is tightened
+# regionally for the appreciation + expansion families. Composite,
+# distress, market-tightness, and vulnerability keep static thresholds.
+# Forecast does not compete for dominant_family.
+#
+# Medium-overrides-high preserved (principle 4): m-rules describe
+# post-transition state; if both fire, BG is past the early-stage crisis.
 
-# Helper: ensure named columns exist (NA-filled when missing) ---------------
-.ensure_cols <- function(df, cols) {
-  for (col in cols) if (!col %in% names(df)) df[[col]] <- NA_real_
-  df
+# =====================================================================
+# Threshold resolution + modulator
+# =====================================================================
+
+.forecast_adjustment_ppt <- function(forecast_cfg) {
+  if (is.null(forecast_cfg)) return(0)
+  raw <- (forecast_cfg$lwa_ba_growth_pct - forecast_cfg$baseline_pct) *
+           forecast_cfg$sensitivity * 100
+  max(0, min(forecast_cfg$max_adjustment_ppt, raw))
 }
 
-# Renter classifier ----------------------------------------------------------
+.resolve_threshold <- function(threshold_ref, family, params, forecast_cfg) {
+  modulated <- isTRUE(family %in% (risk_matrix$forecast_modulator$affects %||% character(0)))
+  adj <- if (modulated) .forecast_adjustment_ppt(forecast_cfg) else 0
+
+  if (is.list(threshold_ref)) {
+    # Between: only the high end gets tightened (low end is the band floor)
+    list(low  = params[[threshold_ref$low]],
+         high = params[[threshold_ref$high]] - adj)
+  } else {
+    params[[threshold_ref]] - adj
+  }
+}
+
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+# =====================================================================
+# Condition evaluator (recursive)
+# =====================================================================
+
+.eval_condition <- function(cond, df, family, params, forecast_cfg) {
+  if (!is.null(cond$combiner)) {
+    parts <- lapply(cond$conditions, .eval_condition, df = df,
+                    family = family, params = params, forecast_cfg = forecast_cfg)
+    mat <- do.call(cbind, parts)
+    switch(cond$combiner,
+           "any" = apply(mat, 1, any, na.rm = FALSE),
+           "all" = apply(mat, 1, all, na.rm = FALSE),
+           stop("Unknown combiner: ", cond$combiner))
+  } else {
+    if (is.null(df[[cond$input]])) return(rep(NA, nrow(df)))
+    x   <- df[[cond$input]]
+    thr <- .resolve_threshold(cond$threshold_ref, family, params, forecast_cfg)
+    switch(cond$direction,
+           "above"   = x >  thr,
+           "below"   = x <  thr,
+           "between" = x >  thr$low & x <= thr$high,
+           stop("Unknown direction: ", cond$direction))
+  }
+}
+
+# Trigger result: returns a list with $fired (logical vector) and $family
+.eval_trigger <- function(trig, df, params, forecast_cfg) {
+  inputs <- .gather_inputs(trig$condition)
+  missing_input <- !all(inputs %in% names(df))
+
+  if (missing_input && isTRUE(trig$optional)) {
+    return(list(fired = rep(FALSE, nrow(df)), family = trig$family))
+  }
+  if (missing_input) {
+    warning("Required column(s) missing for non-optional trigger: ",
+            paste(setdiff(inputs, names(df)), collapse = ", "))
+    return(list(fired = rep(FALSE, nrow(df)), family = trig$family))
+  }
+
+  fired <- .eval_condition(trig$condition, df, trig$family, params, forecast_cfg)
+  fired[is.na(fired)] <- FALSE
+  list(fired = fired, family = trig$family)
+}
+
+.gather_inputs <- function(cond) {
+  if (!is.null(cond$combiner)) {
+    unique(unlist(lapply(cond$conditions, .gather_inputs)))
+  } else cond$input
+}
+
+# Rule result: returns a list with $fired (logical) + $families_fired
+# (list of character vectors per row — which families had a fired trigger
+# in this rule). Gate is applied last (AND-ed with the combiner result).
+.eval_rule <- function(rule, df, params, forecast_cfg, fired_rules) {
+  trig_results <- lapply(rule$triggers, .eval_trigger,
+                         df = df, params = params, forecast_cfg = forecast_cfg)
+  fired_mat <- do.call(cbind, lapply(trig_results, `[[`, "fired"))
+  families  <- vapply(trig_results, `[[`, character(1), "family")
+
+  rule_fired <- switch(rule$combiner,
+    "any"      = apply(fired_mat, 1, any),
+    "all"      = apply(fired_mat, 1, all),
+    "count_ge" = rowSums(fired_mat) >= params[[rule$count_threshold_ref]],
+    stop("Unknown rule combiner: ", rule$combiner))
+
+  # Use [[ throughout to avoid $ partial-matching (e.g. rule$gate would
+  # otherwise match rule$gate_rule when only the latter exists).
+  if (!is.null(rule[["gate"]])) {
+    gate_ok <- .eval_condition(rule[["gate"]], df, family = NULL,
+                               params = params, forecast_cfg = forecast_cfg)
+    gate_ok[is.na(gate_ok)] <- FALSE
+    rule_fired <- rule_fired & gate_ok
+  }
+
+  # gate_rule: rule fires only if another named rule has also fired.
+  # Resolved by passing the fired_rules accumulator.
+  if (!is.null(rule[["gate_rule"]])) {
+    gating <- fired_rules[[rule[["gate_rule"]]]]
+    if (is.null(gating)) {
+      stop("gate_rule references unknown rule: ", rule[["gate_rule"]])
+    }
+    rule_fired <- rule_fired & gating
+  }
+
+  # families fired per row: character vector of unique family names whose
+  # triggers fired in this rule for this BG.
+  families_per_row <- apply(fired_mat, 1, function(v) unique(families[v]))
+
+  list(fired = rule_fired, families_per_row = families_per_row)
+}
+
+# =====================================================================
+# Tier resolution + dominant_family
+# =====================================================================
+
+.eval_vulnerability <- function(vuln, df, params, forecast_cfg) {
+  gate_results <- lapply(vuln$gates, function(g) {
+    .eval_condition(list(combiner = g$combiner, conditions = g$conditions),
+                    df = df, family = NULL, params = params,
+                    forecast_cfg = forecast_cfg)
+  })
+  mat <- do.call(cbind, gate_results)
+  mat[is.na(mat)] <- FALSE
+  apply(mat, 1, switch(vuln$combiner, "any" = any, "all" = all))
+}
+
+.classify_tenure <- function(tenure, bg_ct_data, params, forecast_cfg) {
+  matrix_t  <- risk_matrix$rules[[tenure]]
+  vuln      <- risk_matrix$vulnerability[[tenure]]
+  priority  <- risk_matrix$priority_order[[tenure]]
+
+  passes <- .eval_vulnerability(vuln, bg_ct_data, params, forecast_cfg)
+  out <- tibble::tibble(
+    GISJOIN_proj    = bg_ct_data$GISJOIN_proj,
+    tier            = NA_character_,
+    dominant_family = NA_character_
+  )
+
+  if (!any(passes)) return(out)
+  idx <- which(passes)
+  df  <- bg_ct_data[idx, , drop = FALSE]
+
+  # Walk rules. Order matters for `gate_rule`: evaluate h1 before h3.
+  fired_rules        <- list()
+  rule_families      <- list()
+  tier_rule_owners   <- list()   # which tier each rule belongs to
+
+  for (tier_name in c("medium", "high")) {
+    for (rule_name in names(matrix_t[[tier_name]])) {
+      rule <- matrix_t[[tier_name]][[rule_name]]
+      res  <- .eval_rule(rule, df, params, forecast_cfg, fired_rules)
+      fired_rules[[rule_name]]      <- res$fired
+      rule_families[[rule_name]]    <- res$families_per_row
+      tier_rule_owners[[rule_name]] <- tier_name
+    }
+  }
+
+  # Tier per BG: any high rule fired → high; any medium → medium; else low.
+  # Medium overrides high when both fire.
+  high_rules <- names(tier_rule_owners)[vapply(tier_rule_owners, identical, logical(1), "high")]
+  med_rules  <- names(tier_rule_owners)[vapply(tier_rule_owners, identical, logical(1), "medium")]
+
+  any_high <- if (length(high_rules)) Reduce(`|`, fired_rules[high_rules]) else rep(FALSE, nrow(df))
+  any_med  <- if (length(med_rules))  Reduce(`|`, fired_rules[med_rules])  else rep(FALSE, nrow(df))
+
+  tier_v <- ifelse(any_med, "medium",
+                   ifelse(any_high, "high", "low"))
+
+  # Dominant family per BG: take all rules that fired AT THE WINNING TIER,
+  # union the families_per_row, then pick the highest-priority family.
+  dominant_v <- character(nrow(df))
+  for (i in seq_len(nrow(df))) {
+    winning_tier <- tier_v[i]
+    if (winning_tier == "low") {
+      dominant_v[i] <- NA_character_
+      next
+    }
+    winning_rules <- if (winning_tier == "medium") med_rules else high_rules
+    fams <- character(0)
+    for (rn in winning_rules) {
+      if (isTRUE(fired_rules[[rn]][i])) {
+        fams <- c(fams, rule_families[[rn]][[i]])
+      }
+    }
+    fams <- unique(fams)
+    if (length(fams) == 0) {
+      dominant_v[i] <- NA_character_
+    } else {
+      hit <- intersect(priority, fams)
+      dominant_v[i] <- if (length(hit) > 0) hit[1] else fams[1]
+    }
+  }
+
+  out$tier[idx]            <- tier_v
+  out$dominant_family[idx] <- dominant_v
+  out
+}
+
+# =====================================================================
+# Public API
+# =====================================================================
+
 classify_risk_renter <- function(bg_ct_data) {
-  bg_ct_data <- .ensure_cols(bg_ct_data, c("rank_evictions"))
-  bg_ct_data %>%
-    mutate(low_N_vulnerable = if_else(renters_20 < risk_params$renters_n_min &
-                                        (median_hhinc_10 < risk_params$med_hhinc_10_max), 1, 0)) %>%
-    filter(low_N_vulnerable == 1 |
-             renters_20 > risk_params$renters_n_min &
-             (median_hhinc_10 < risk_params$med_hhinc_10_max)) %>%
-    # Medium-tier rules: appreciation (m1) + composite gentrification (m2)
-    mutate(r_m1a = if_else(rank_rents > risk_params$q4_cutoff |
-                             rank_rents2 > risk_params$q4_cutoff, 1, 0, missing = 0),
-           r_m1b = if_else(rank_permits_renov > risk_params$q4_cutoff |
-                             rank_evictions > risk_params$q4_cutoff, 1, 0, missing = 0),
-           r_m1  = if_else(r_m1a + r_m1b > 0 &
-                             pop_change10_20 > risk_params$pop_change_min, 1, 0),
-           r_m2a = if_else(rank_college  > risk_params$q4_cutoff, 1, 0),
-           r_m2b = if_else(rank_hhinc    > risk_params$q4_cutoff, 1, 0),
-           r_m2c = if_else(rank_hi_inc   > risk_params$q4_cutoff, 1, 0),
-           r_m2d = if_else(rank_lo_inc   < risk_params$q1_cutoff, 1, 0),
-           r_m2e = if_else(black_change10_20 < risk_params$black_change_abs_m &
-                             blackpct_ch_00_20 < risk_params$black_change_pct_max, 1, 0),
-           r_m2f = if_else(pop_change10_20 > risk_params$pop_change_min, 1, 0),
-           r_m2  = if_else(r_m2a + r_m2b + r_m2c + r_m2d + r_m2e >= risk_params$composite_min_count &
-                             r_m2f == 1 &
-                             (median_hhinc_20 > risk_params$med_hhinc_20_threshold |
-                                median_rent_20 > risk_params$med_rent_20_threshold),
-                           1, 0, missing = 0)) %>%
-    # High-tier rules: middle-band appreciation (h1) + composite below
-    # "expensive enough" (h2) + market tightness AND h1 (h3).
-    mutate(r_h1a = if_else((rank_rents  > risk_params$upper_half & rank_rents  <= risk_params$q4_cutoff) |
-                             (rank_rents2 > risk_params$upper_half & rank_rents2 <= risk_params$q4_cutoff),
-                           1, 0, missing = 0),
-           r_h1b = if_else((rank_permits_renov > risk_params$upper_half & rank_permits_renov <= risk_params$q4_cutoff) |
-                             (rank_evictions   > risk_params$upper_half & rank_evictions    <= risk_params$q4_cutoff),
-                           1, 0, missing = 0),
-           r_h1  = if_else(r_h1a + r_h1b > 0, 1, 0),
-           r_h2a = if_else(rank_college  > risk_params$above_med, 1, 0),
-           r_h2b = if_else(rank_hhinc    > risk_params$above_med, 1, 0),
-           r_h2c = if_else(rank_hi_inc   > risk_params$above_med, 1, 0),
-           r_h2d = if_else(rank_lo_inc   < risk_params$below_med, 1, 0),
-           r_h2e = if_else(black_change10_20 < risk_params$black_change_abs_h &
-                             blackpct_ch_00_20 < risk_params$black_change_pct_max, 1, 0),
-           r_h2  = if_else(r_h2a + r_h2b + r_h2c + r_h2d + r_h2e >= risk_params$composite_min_count &
-                             median_hhinc_20 < risk_params$med_hhinc_20_threshold &
-                             median_rent_20  < risk_params$med_rent_20_threshold,
-                           1, 0, missing = 0),
-           r_h3a = if_else(rank_housing_tight > risk_params$above_med |
-                             rank_vacant_ch    > risk_params$above_med |
-                             rank_renter_p     > risk_params$above_med |
-                             rank_permits_demo > risk_params$above_med, 1, 0, missing = 0),
-           r_h3  = if_else(r_h3a > 0 & r_h1 == 1, 1, 0)) %>%
-    mutate(r_hi_all  = if_else(r_h1 == 1 | r_h2 == 1 | r_h3 == 1, 1, 0),
-           r_med_all = if_else(r_m1 == 1 | r_m2 == 1, 1, 0),
-           # Medium overrides high when both fire — deliberate, locked in
-           # at Phase 4.1 (m* rules describe areas past the transition).
-           risk_level_renter = if_else(r_hi_all == 1, "high", "low"),
-           risk_level_renter = if_else(r_med_all == 1, "medium", risk_level_renter),
-           risk_level_renter = factor(risk_level_renter, levels = c("low", "medium", "high"))) %>%
-    select(GISJOIN_proj,
-           r_m1, r_m2, r_h1, r_h2, r_h3,
-           r_hi_all, r_med_all, risk_level_renter)
+  res <- .classify_tenure("renter", bg_ct_data, risk_params, forecast)
+  res$tier <- factor(ifelse(is.na(res$tier), "low", res$tier),
+                     levels = c("low", "medium", "high"))
+  res$dominant_family <- factor(res$dominant_family,
+                                levels = risk_matrix$priority_order$renter)
+  names(res)[names(res) == "tier"]            <- "risk_level_renter"
+  names(res)[names(res) == "dominant_family"] <- "dominant_family_renter"
+  res
 }
 
-# Owner classifier ----------------------------------------------------------
 classify_risk_owner <- function(bg_ct_data) {
-  bg_ct_data <- .ensure_cols(bg_ct_data, c("rank_cyclomedia", "rank_assess_growth"))
-  bg_ct_data %>%
-    # Owner-vulnerability filter: sufficient owner sample, low income,
-    # long-tenure majority, AND (cost-burdened owners OR low mortgage
-    # access via HMDA denials). The optional HMDA branch lets the filter
-    # qualify BGs where owners face mortgage barriers even when not
-    # currently cost-burdened.
-    mutate(low_N_owner_vulnerable = if_else(
-              owner_20_ct < risk_params$owners_n_min &
-              median_hhinc_10 < risk_params$med_hhinc_10_max &
-              owner_longtenure_p >= risk_params$longtenure_min,
-              1, 0, missing = 0)) %>%
-    filter(low_N_owner_vulnerable == 1 |
-             (owner_20_ct > risk_params$owners_n_min &
-                median_hhinc_10 < risk_params$med_hhinc_10_max &
-                owner_longtenure_p >= risk_params$longtenure_min &
-                (owner_costburden_p >= risk_params$costburden_min |
-                   hmda_denial_rate  >= risk_params$hmda_denial_min))) %>%
-    # Medium-tier rules: HV/MLS appreciation (m1) + composite gentrification (m2)
-    mutate(o_m1a = if_else(rank_HV > risk_params$q4_cutoff |
-                             rank_mls_growth > risk_params$q4_cutoff, 1, 0, missing = 0),
-           o_m1b = if_else(rank_assess_growth > risk_params$q4_cutoff, 1, 0, missing = 0),
-           o_m1  = if_else(o_m1a + o_m1b > 0 &
-                             pop_change10_20 > risk_params$pop_change_min, 1, 0),
-           o_m2a = if_else(rank_college  > risk_params$q4_cutoff, 1, 0),
-           o_m2b = if_else(rank_hhinc    > risk_params$q4_cutoff, 1, 0),
-           o_m2c = if_else(rank_hi_inc   > risk_params$q4_cutoff, 1, 0),
-           o_m2d = if_else(rank_lo_inc   < risk_params$q1_cutoff, 1, 0),
-           o_m2e = if_else(black_change10_20 < risk_params$black_change_abs_m &
-                             blackpct_ch_00_20 < risk_params$black_change_pct_max, 1, 0),
-           o_m2f = if_else(pop_change10_20 > risk_params$pop_change_min, 1, 0),
-           o_m2  = if_else(o_m2a + o_m2b + o_m2c + o_m2d + o_m2e >= risk_params$composite_min_count &
-                             o_m2f == 1 &
-                             median_hv_20 > risk_params$med_hv_20_threshold,
-                           1, 0, missing = 0)) %>%
-    # High-tier rules: middle-band appreciation (h1) + composite below
-    # "expensive enough" (h2) + market tightness AND h1 (h3).
-    mutate(o_h1a = if_else((rank_HV         > risk_params$upper_half & rank_HV         <= risk_params$q4_cutoff) |
-                             (rank_mls_growth > risk_params$upper_half & rank_mls_growth <= risk_params$q4_cutoff),
-                           1, 0, missing = 0),
-           o_h1  = if_else(o_h1a > 0, 1, 0),
-           o_h2a = if_else(rank_college  > risk_params$above_med, 1, 0),
-           o_h2b = if_else(rank_hhinc    > risk_params$above_med, 1, 0),
-           o_h2c = if_else(rank_hi_inc   > risk_params$above_med, 1, 0),
-           o_h2d = if_else(rank_lo_inc   < risk_params$below_med, 1, 0),
-           o_h2e = if_else(black_change10_20 < risk_params$black_change_abs_h &
-                             blackpct_ch_00_20 < risk_params$black_change_pct_max, 1, 0),
-           o_h2  = if_else(o_h2a + o_h2b + o_h2c + o_h2d + o_h2e >= risk_params$composite_min_count &
-                             median_hv_20 < risk_params$med_hv_20_threshold,
-                           1, 0, missing = 0),
-           # Owner h3 swaps the renter-side market tightness signals for
-           # owner-relevant ones: vacancy change, renovation flipping,
-           # plus optional Cyclomedia (poor conditions) when populated.
-           o_h3a = if_else(rank_vacant_ch     > risk_params$above_med |
-                             rank_permits_renov > risk_params$above_med |
-                             rank_cyclomedia    > risk_params$above_med, 1, 0, missing = 0),
-           o_h3  = if_else(o_h3a > 0 & o_h1 == 1, 1, 0),
-           # Parallel financial-distress track. High foreclosure rate flags
-           # owner displacement via the financial-distress mechanism, which
-           # is policy-distinct from gentrification displacement.
-           o_d1  = if_else(rank_foreclosure > risk_params$q4_cutoff, 1, 0, missing = 0)) %>%
-    mutate(o_hi_all  = if_else(o_h1 == 1 | o_h2 == 1 | o_h3 == 1 | o_d1 == 1, 1, 0),
-           o_med_all = if_else(o_m1 == 1 | o_m2 == 1, 1, 0),
-           risk_level_owner = if_else(o_hi_all == 1, "high", "low"),
-           risk_level_owner = if_else(o_med_all == 1, "medium", risk_level_owner),
-           risk_level_owner = factor(risk_level_owner, levels = c("low", "medium", "high"))) %>%
-    select(GISJOIN_proj,
-           o_m1, o_m2, o_h1, o_h2, o_h3, o_d1,
-           o_hi_all, o_med_all, risk_level_owner)
+  res <- .classify_tenure("owner", bg_ct_data, risk_params, forecast)
+  res$tier <- factor(ifelse(is.na(res$tier), "low", res$tier),
+                     levels = c("low", "medium", "high"))
+  res$dominant_family <- factor(res$dominant_family,
+                                levels = risk_matrix$priority_order$owner)
+  names(res)[names(res) == "tier"]            <- "risk_level_owner"
+  names(res)[names(res) == "dominant_family"] <- "dominant_family_owner"
+  res
 }
