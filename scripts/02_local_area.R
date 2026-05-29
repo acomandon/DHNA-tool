@@ -129,7 +129,10 @@ pop_ma_s <- bind_rows(pop_s, Jefferson_bg_ma) %>%
 
 # Validation ---------------------------------------------------------------
 validation_banner("Stage 02 — local area & ethnoracial change")
-check_coverage(dplyr::n_distinct(local_area$GISJOIN_proj), nrow(bg2020),
+# Coverage denominator is the focal-county BG layer (lvm_bg_geo, Jefferson
+# pop > 0), not statewide bg2020. local_area is by construction scoped to
+# focal BGs, so the comparison must be local_area focal BGs / total focal BGs.
+check_coverage(dplyr::n_distinct(local_area$GISJOIN_proj), nrow(lvm_bg_geo),
                "local_area covers focal BGs", min_frac = 0.9, severity = "warn")
 check_values_present(pop_ethnorace, "data_yr", c(1990, 2000, 2010, 2020))
 check_na_share(pop_s, "pop", min_frac = 0.95, severity = "warn")
