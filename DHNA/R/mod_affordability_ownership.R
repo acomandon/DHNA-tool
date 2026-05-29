@@ -90,8 +90,9 @@ mod_affordability_ownership_server <- function(id, bg_id, proj_size, adat_data) 
     recommendation_result <- reactive({
       req(input$submit)
       recommend_project_ownership(
-        risk_level = area()$risk_level_owner,
-        project_size = proj_size(),
+        risk_level      = area()$risk_level_owner,
+        dominant_family = area()$dominant_family_owner,
+        project_size    = proj_size(),
         ownership_inputs = list(
           program_name     = input$program_name,
           home_type        = input$home_type,
