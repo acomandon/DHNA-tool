@@ -2,3 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
+.positai
+
+# Dewey downloads (multi-GB parquet trees; never commit)
+data/dewey/

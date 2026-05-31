@@ -1,0 +1,9 @@
+name: dewey
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pyarrow=24
+  - pip
+  - pip:
+      - deweypy==0.8.0
