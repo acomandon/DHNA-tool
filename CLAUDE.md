@@ -21,13 +21,15 @@ Ongoing directions for the tool — keep these in mind when suggesting changes o
 
 ## Pipeline structure
 
-The repo has a strict two-stage flow:
+The repo has a strict two-stage flow, with two independent data acquisition scripts feeding stage 1:
 
-1. **`scripts/data_downloader.R`** — pulls raw data from the IPUMS NHGIS and IPUMS USA APIs into `data/` (block, blockgroup, tract, crosswalks, GIS shapefiles, PUMS). Run **once**; expensive (submits IPUMS extracts and waits). Requires an IPUMS API key configured per the [ipumsr API vignette](https://cran.r-project.org/web/packages/ipumsr/vignettes/ipums-api.html).
+1. **Data acquisition** (run once, or whenever refreshing inputs):
+   - **`scripts/data_downloader.R`** — pulls IPUMS NHGIS and IPUMS USA data into `data/nhgis/` and `data/pums_usa/` (block, blockgroup, tract, crosswalks, GIS shapefiles, PUMS). Expensive (submits IPUMS extracts and waits). Requires an IPUMS API key per the [ipumsr API vignette](https://cran.r-project.org/web/packages/ipumsr/vignettes/ipums-api.html).
+   - **`scripts/data_downloader_dewey.py`** (optional) — pulls Dewey rental partner data (Renthub, Dwellsy TotalIQ) as parquet trees into `data/dewey/<partner>/`. Currently used only by `scripts/exploratory/rental_coverage_audit.R`; the production pipeline still reads the quarterly-aggregated `data/prepackaged/renthub/rent_buffer.csv` (a prep step to rebuild that CSV from `data/dewey/renthub/` is future work). Runs from the `dewey` conda env (see the Python sidecar note below) and needs `DEWEY_API_KEY`.
 2. **`scripts/00_run_all.R`** — orchestrator that loads libraries, sources `R/` helpers, then sources stage scripts `01_geo_standardize.R` → `07_risk.R` in order. Reads from `data/` plus prepackaged inputs in `data/prepackaged/` (HUD AFFH, permits, Renthub rents, market areas, affordable units), standardizes everything to **2020 block-group geography** using NHGIS crosswalks, computes risk variables, and writes the small set of CSV/SHP files the Shiny app loads into `DHNA/data/` and `DHNA/data/gis/`.
 3. **`DHNA/` Shiny app** (`global.R` + `ui.R` + `server.R` + panel modules in `DHNA/R/`) — loads only the artifacts produced in step 2; does **not** read from `data/` or call any APIs at runtime. Open `build_tool.Rproj` in RStudio, open `DHNA/ui.R` (or `server.R`), and click **Run App** — or run `shiny::runApp("DHNA")`.
 
-The line `source(here("scripts", "data_downloader.R"))` in `00_run_all.R` is **commented out by default** — uncomment only on first run, then re-comment.
+The line `source(here("scripts", "data_downloader.R"))` in `00_run_all.R` is **commented out by default** — uncomment only on first run, then re-comment. The Dewey downloader is invoked separately (not from `00_run_all.R`).
 
 ### Stage scripts (sourced in order by `00_run_all.R`)
 
@@ -55,9 +57,9 @@ Inter-stage data flow is **source-in-one-session**: each stage assumes the works
 - **Dependencies are pinned with `renv`** (`renv.lock` at the project root). After cloning, run `renv::restore()` in R before sourcing anything.
 - **Python sidecar env for Dewey downloads.** The Dewey data partner (Renthub, Dwellsy TotalIQ) has no R SDK, so those pulls run from a small Python helper that wraps the official `deweypy` client. The env is pinned in `environment.yml` (Python 3.12 + `pyarrow` + `deweypy`); create it with `conda env create -f environment.yml` and activate with `conda activate dewey`. Set `DEWEY_API_KEY` as a user env var before running anything. The downloaded parquet trees live under `data/dewey/<partner>/` and are read back into R via `arrow::open_dataset()`.
 
-## Required data not pulled by `data_downloader.R`
+## Prepackaged inputs (`data/prepackaged/`)
 
-These come pre-committed under `data/prepackaged/` and are Louisville-specific:
+Locality-specific inputs that don't come from either downloader. Pre-committed:
 - `Market_Areas/` — comprehensive plan market area shapefile
 - `affordable/` — affordable housing unit database (geocoded)
 - `permits/` — building permit records
