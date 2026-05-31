@@ -170,11 +170,35 @@ mod_location_server <- function(id, lvm_bg_geo) {
       }
     })
 
+    # Friendly project label for downstream consumers (e.g. PDF report).
+    # Falls back to lat/lng (or empty) when the user selected via map-click.
+    location_label <- reactive({
+      addr <- trimws(input$address %||% "")
+      city <- trimws(input$city    %||% "")
+      zip  <- trimws(input$zip     %||% "")
+      parts <- c(
+        if (nzchar(addr)) addr else NULL,
+        if (nzchar(city) || nzchar(zip))
+          trimws(paste(city, locality$state_abbr, zip, sep = " "))
+        else NULL
+      )
+      if (length(parts) > 0) {
+        paste(parts, collapse = ", ")
+      } else if (!is.na(pr_location1()$lat)) {
+        sprintf("(%.5f, %.5f)", pr_location1()$lat, pr_location1()$lng)
+      } else {
+        ""
+      }
+    })
+
     list(
       bg_id = bg_id,
       proj_size = reactive(input$proj_size),
       tenure = reactive(input$tenure),
-      go_to_form = reactive(input$valid_loc_btn)
+      go_to_form = reactive(input$valid_loc_btn),
+      location_label = location_label
     )
   })
 }
+
+`%||%` <- function(a, b) if (is.null(a)) b else a

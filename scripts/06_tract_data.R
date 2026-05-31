@@ -217,7 +217,11 @@ bg_ct_data <- BGxCT %>%
          rank_lo_inc = ceiling(rank_lo_inc/max(rank_lo_inc, na.rm = T)*100),
          rank_rents = rank((median_rent_20-median_rent_10)/median_rent_10, na.last = "keep"),
          rank_rents = ceiling(rank_rents/max(rank_rents, na.rm = T)*100),
-         rank_rents2 = rank((rent_bg_Q3_2024-rent_bg_Q3_2017)/rent_bg_Q3_2017, na.last = "keep"),
+         # rent_change_pct comes from rent_buffer_wide in stage 05 (Renthub).
+         # When Renthub is unconfigured (optional_data$renthub NULL), this
+         # column is all NA and rank_rents2 collapses to all NA — handled by
+         # the classifier as a non-firing trigger.
+         rank_rents2 = rank(rent_change_pct, na.last = "keep"),
          rank_rents2 = ceiling(rank_rents2/max(rank_rents2, na.rm = T)*100),
          rank_HV = rank((median_hv_20-median_hv_10)/median_hv_10, na.last = "keep"),
          rank_HV = ceiling(rank_HV/max(rank_HV, na.rm = T)*100),
@@ -261,12 +265,14 @@ check_na_share(bg_ct_data, "cyclomedia_prob_per_1000hu", 0.3, "warn")  # partial
 # Every rank feeds classify_risk(); an all-NA rank silently disables a criterion.
 rank_cols <- c("rank_renter_p", "rank_housing_tight", "rank_hh_growth",
                "rank_vacant_ch", "rank_college", "rank_hhinc", "rank_hi_inc",
-               "rank_lo_inc", "rank_rents", "rank_rents2", "rank_HV", "rank_permits",
+               "rank_lo_inc", "rank_rents", "rank_HV", "rank_permits",
                # Phase 4.2b.2 — new ranks for tenure-aware risk (Goal #4).
                "rank_permits_new", "rank_permits_renov", "rank_permits_demo",
                "rank_mls_growth", "rank_foreclosure",
                "rank_hmda_denial", "rank_cyclomedia",
                # Phase 4.2b.3 — owner-vulnerability ranks.
                "rank_owner_costburden", "rank_owner_longtenure")
+# rank_rents2 is sourced from Renthub (optional). Only check when configured.
+if (!is.null(optional_data$renthub)) rank_cols <- c(rank_cols, "rank_rents2")
 for (rc in rank_cols) check_not_all_na(bg_ct_data, rc, severity = "error")
 for (rc in rank_cols) check_range(bg_ct_data, rc, 1, 100, severity = "warn")

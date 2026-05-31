@@ -9,36 +9,60 @@
 # Produces: rent_buffer_wide, rent_buffer, bg_permits, bg_ah, bg_data.
 # Writes: DHNA/data/Renthub_quarterly_rent.csv.
 
-# rent from Renthub - change between Q3 2017 and Q3 2024 (wide; feeds rank_rents2)
-# limiting to areas where there are at least 30 observations
-rent_buffer_wide <- read_csv(here("data", "prepackaged", "renthub", "rent_buffer.csv")) %>%
-  mutate(year_qu_text = paste0(R_quarter, "_", R_year)) %>%
-  filter(year_qu_text == "Q3_2017" | year_qu_text == "Q3_2024") %>%
-  filter(N > 30) %>%
-  group_by(GISJOIN) %>%
-  mutate(bg_n = n()) %>%
-  filter(bg_n == 2) %>% # require both quarters present
-  select(-bg_n) %>%
-  pivot_wider(id_cols = c(GISJOIN, GEOID_bg, market_area),
-              names_from = year_qu_text,
-              values_from = c(rent_bg, rent_ma)) %>%
-  rename(GISJOIN_proj = GISJOIN) %>%
-  select(-market_area)
+# Renthub rents — optional source (paywalled via Dewey; see optional_data$renthub
+# in R/config.R). When configured, produces:
+#   - rent_buffer_wide: per-BG rent_change_pct between baseline_q and recent_q
+#     (both post-2018 per the rental_coverage audit's regime-change finding).
+#   - rent_buffer (long): quarterly series written for the Shiny app, filtered
+#     to date_floor_year+1 forward.
+# When NULL, both become empty stubs (column-only) and the bg_data join below
+# produces all-NA rent_change_pct without any conditional branching.
+rh_cfg <- optional_data$renthub
+if (!is.null(rh_cfg)) {
+  baseline_q <- paste0(rh_cfg$baseline_quarter, "_", rh_cfg$baseline_year)
+  recent_q   <- paste0(rh_cfg$recent_quarter,   "_", rh_cfg$recent_year)
+  renthub_raw <- read_csv(here("data", "prepackaged", "renthub", rh_cfg$csv)) %>%
+    mutate(year_qu_text = paste0(R_quarter, "_", R_year))
 
-# rent from Renthub - quarterly change from 01/2019 to 09/2024 (long; written to disk for the Shiny app)
-# limiting to areas where there are at least 30 observations
-# and 20 quarters of data
-rent_buffer <- read_csv(here("data", "prepackaged", "renthub", "rent_buffer.csv")) %>%
-  mutate(year_qu_text = paste0(R_quarter, "_", R_year)) %>%
-  filter(R_year > 2017) %>%
-  filter(N > 30) %>%
-  group_by(GISJOIN) %>%
-  mutate(bg_n = n()) %>%
-  filter(bg_n > 20) %>% # make sure there is enough observations in both years
-  select(-bg_n)  %>%
-  rename(GISJOIN_proj = GISJOIN) %>%
-  select(-market_area) %>%
-  write_csv(., here("DHNA", "data", "Renthub_quarterly_rent.csv"))
+  # Wide: per-BG rent change between baseline and recent quarter. Both
+  # quarters must be present per BG (no extrapolation).
+  rent_buffer_wide <- renthub_raw %>%
+    filter(year_qu_text == baseline_q | year_qu_text == recent_q) %>%
+    filter(N > rh_cfg$min_obs_per_q) %>%
+    group_by(GISJOIN) %>%
+    mutate(bg_n = n()) %>%
+    filter(bg_n == 2) %>%
+    select(-bg_n) %>%
+    pivot_wider(id_cols = c(GISJOIN, GEOID_bg, market_area),
+                names_from = year_qu_text,
+                values_from = c(rent_bg, rent_ma)) %>%
+    rename(GISJOIN_proj = GISJOIN) %>%
+    mutate(rent_change_pct = (.data[[paste0("rent_bg_", recent_q)]] -
+                              .data[[paste0("rent_bg_", baseline_q)]]) /
+                             .data[[paste0("rent_bg_", baseline_q)]]) %>%
+    select(GISJOIN_proj, rent_change_pct)
+
+  # Long: quarterly series written to disk for the Shiny app. Filter to
+  # post-gap quarters (R_year > date_floor_year) and require min_quarters_long
+  # quarters per BG for stability.
+  rent_buffer <- renthub_raw %>%
+    filter(R_year > rh_cfg$date_floor_year) %>%
+    filter(N > rh_cfg$min_obs_per_q) %>%
+    group_by(GISJOIN) %>%
+    mutate(bg_n = n()) %>%
+    filter(bg_n > rh_cfg$min_quarters_long) %>%
+    select(-bg_n) %>%
+    rename(GISJOIN_proj = GISJOIN) %>%
+    select(-market_area) %>%
+    write_csv(., here("DHNA", "data", "Renthub_quarterly_rent.csv"))
+} else {
+  rent_buffer_wide <- tibble::tibble(
+    GISJOIN_proj    = character(0),
+    rent_change_pct = numeric(0)
+  )
+  rent_buffer <- NULL
+  # Don't write Renthub_quarterly_rent.csv; DHNA/global.R handles its absence.
+}
 
 # number of permits and affordable units within 800 m of block
 # Create 800m buffer around BG population center

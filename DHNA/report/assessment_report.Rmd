@@ -1,0 +1,178 @@
+---
+title: "Project Affordability Assessment"
+output:
+  html_document:
+    self_contained: true
+    theme: null
+    highlight: null
+params:
+  tenure: "rental"
+  location_label: ""
+  bg_id: ""
+  proj_size: 0
+  inputs: !r list()
+  context: !r list()
+  messages: !r character(0)
+  tool_name: "DHNA — Displacement and Housing Need Assessment"
+  generated_at: !r format(Sys.time(), "%Y-%m-%d %H:%M %Z")
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+tenure_label <- if (identical(params$tenure, "ownership")) "Homeownership" else "Rental"
+
+# Helpers
+fmt_money <- function(x) {
+  if (is.null(x) || is.na(x)) return("—")
+  paste0("$", format(round(x), big.mark = ",", scientific = FALSE))
+}
+nz <- function(x, fallback = "—") if (is.null(x) || length(x) == 0 || is.na(x[[1]]) || !nzchar(as.character(x[[1]]))) fallback else as.character(x[[1]])
+```
+
+<style>
+@page { size: letter; margin: 0.6in 0.7in; }
+body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, sans-serif;
+       color: #222; max-width: 7.2in; margin: 0 auto; padding: 0; line-height: 1.4; }
+h1 { font-size: 22pt; margin: 0 0 2px 0; }
+.subtitle { color: #555; font-size: 10pt; margin-bottom: 18px; }
+h2 { font-size: 12.5pt; border-bottom: 1px solid #888; padding-bottom: 3px;
+     margin: 22px 0 10px 0; text-transform: uppercase; letter-spacing: 0.6px; }
+.kv { display: grid; grid-template-columns: 200px 1fr; row-gap: 4px; font-size: 10.5pt; }
+.kv .k { color: #555; font-weight: 500; }
+.boxes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+         margin-top: 6px; }
+.box { border: 1px solid #ccc; border-radius: 6px; padding: 10px 14px;
+       background: #f8f9fa; break-inside: avoid; }
+.box .label { color: #555; font-size: 8.5pt; text-transform: uppercase;
+              letter-spacing: 0.5px; font-weight: 600; }
+.box .value { font-size: 12pt; font-weight: 600; margin: 4px 0; }
+.box .note  { color: #666; font-size: 8.5pt; line-height: 1.35; }
+.messages { padding-left: 18px; font-size: 10.5pt; }
+.messages li { margin-bottom: 5px; }
+.footer { color: #888; font-size: 8pt; margin-top: 32px;
+          border-top: 1px solid #ddd; padding-top: 6px; }
+</style>
+
+<div class="subtitle">Tenure: <b>`r tenure_label`</b> &nbsp;•&nbsp; Generated `r params$generated_at`</div>
+
+## Project details
+
+<div class="kv">
+  <div class="k">Location</div><div>`r nz(params$location_label)`</div>
+  <div class="k">Block group (GISJOIN)</div><div>`r nz(params$bg_id)`</div>
+  <div class="k">Project size</div><div>`r params$proj_size` units</div>
+</div>
+
+```{r inputs-section, results = "asis"}
+inp <- params$inputs
+if (identical(params$tenure, "ownership")) {
+  cat('### Ownership inputs\n\n')
+  cat('<div class="kv">\n')
+  cat(sprintf('  <div class="k">Assistance program</div><div>%s</div>\n',         nz(inp$program_name)))
+  cat(sprintf('  <div class="k">Home type</div><div>%s</div>\n',                   nz(inp$home_type)))
+  cat(sprintf('  <div class="k">Assisted units</div><div>%s</div>\n',              nz(inp$assisted_units, "0")))
+  cat(sprintf('  <div class="k">Reserved units (right of refusal)</div><div>%s</div>\n', nz(inp$reserved_units, "0")))
+  if (!is.null(inp$reserved_units) && !is.na(inp$reserved_units) && inp$reserved_units > 0) {
+    cat(sprintf('  <div class="k">Reserved unit sale price</div><div>%s</div>\n', fmt_money(inp$reserved_price)))
+  }
+  if (!is.null(inp$eligibility_tags) && length(inp$eligibility_tags) > 0) {
+    cat(sprintf('  <div class="k">Eligibility focus</div><div>%s</div>\n',
+                paste(inp$eligibility_tags, collapse = ", ")))
+  }
+  cat('</div>\n')
+} else {
+  cat('### AMI breakdown\n\n')
+  cat('<div class="kv">\n')
+  for (k in c("ami30", "ami50", "ami60", "ami70", "ami80")) {
+    pct <- sub("ami", "", k)
+    cat(sprintf('  <div class="k">Units at %s%% AMI or below</div><div>%s</div>\n',
+                pct, nz(inp[[k]], "0")))
+  }
+  cat('</div>\n')
+}
+```
+
+## Risk assessment
+
+```{r boxes, results = "asis"}
+ctx <- params$context
+boxes <- list()
+
+if (identical(params$tenure, "ownership")) {
+  boxes[[1]] <- list(
+    label = "Tenure",
+    value = sprintf("%s owner units (%s%% of households)",
+                    nz(ctx$owner_count, "—"), nz(ctx$owner_p_20, "—")),
+    note  = "Ownership projects are evaluated against the local homeowner context."
+  )
+  boxes[[2]] <- list(
+    label = "Risk Level",
+    value = nz(ctx$risk_level),
+    note  = "The risk level determines the criteria the project must meet."
+  )
+  price_value <- if (!is.null(ctx$reserved_units) && !is.na(ctx$reserved_units) && ctx$reserved_units > 0) {
+    gate <- if (isTRUE(ctx$price_gate_passes)) "meets HUD limit" else sprintf("exceeds HUD limit %s", fmt_money(ctx$hud_max_price))
+    sprintf("%s — %s", fmt_money(ctx$reserved_price), gate)
+  } else {
+    sprintf("No reserved units (HUD limit %s)", fmt_money(ctx$hud_max_price))
+  }
+  boxes[[3]] <- list(
+    label = "Reserved-unit price gate",
+    value = price_value,
+    note  = sprintf("Reserved units only count toward the requirement if priced at or below the HUD %s limit.",
+                    nz(ctx$home_type_label, "home"))
+  )
+  boxes[[4]] <- list(
+    label = "Housing Cost Burden",
+    value = sprintf("%s%% of households cost-burdened", nz(ctx$cost_burden_pct, "—")),
+    note  = "The share of cost-burdened households determines how many units must be reserved."
+  )
+} else {
+  boxes[[1]] <- list(
+    label = "Tenure",
+    value = sprintf("%s renters (%s%% of households)",
+                    nz(ctx$renters_20, "—"), nz(ctx$renter_p_20, "—")),
+    note  = "Renters are most at risk of displacement. High shares of renters can signal vulnerability."
+  )
+  boxes[[2]] <- list(
+    label = "Risk Level",
+    value = nz(ctx$risk_level),
+    note  = "The risk level determines the criteria the project must meet."
+  )
+  boxes[[3]] <- list(
+    label = "Affordability",
+    value = sprintf("%s%% of renters can afford up to %s",
+                    nz(ctx$majority_pct_renters, "—"), nz(ctx$majority_level, "—")),
+    note  = "Projects should be affordable to a majority of renters in medium and high risk areas."
+  )
+  boxes[[4]] <- list(
+    label = "Housing Cost Burden",
+    value = sprintf("%s%% of households cost-burdened", nz(ctx$cost_burden_pct, "—")),
+    note  = "The share of cost-burdened households determines how many units should be affordable."
+  )
+}
+
+cat('<div class="boxes">\n')
+for (b in boxes) {
+  cat(sprintf('  <div class="box"><div class="label">%s</div><div class="value">%s</div><div class="note">%s</div></div>\n',
+              b$label, b$value, b$note))
+}
+cat('</div>\n')
+```
+
+## Recommendation
+
+```{r messages, results = "asis"}
+msgs <- params$messages
+if (length(msgs) == 0) {
+  cat("_No recommendation was produced._\n")
+} else {
+  cat('<ul class="messages">\n')
+  for (m in msgs) cat(sprintf("  <li>%s</li>\n", m))
+  cat('</ul>\n')
+}
+```
+
+<div class="footer">
+`r params$tool_name`. Generated `r params$generated_at`.
+</div>

@@ -4,9 +4,10 @@
 # layout as the rental path.
 #
 # Args:
-#   bg_id       reactive returning the focal block group GISJOIN
-#   proj_size   reactive returning the proposed number of units
-#   adat_data   the risk database (one row per block group)
+#   bg_id           reactive returning the focal block group GISJOIN
+#   proj_size       reactive returning the proposed number of units
+#   adat_data       the risk database (one row per block group)
+#   location_label  reactive returning a friendly project location string for the PDF
 # Returns:
 #   list(see_details = reactive(input$next_sec))  drives the Area overview panel
 
@@ -69,7 +70,8 @@ mod_affordability_ownership_ui <- function(id) {
   )
 }
 
-mod_affordability_ownership_server <- function(id, bg_id, proj_size, adat_data) {
+mod_affordability_ownership_server <- function(id, bg_id, proj_size, adat_data,
+                                                location_label = reactive("")) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -145,8 +147,8 @@ mod_affordability_ownership_server <- function(id, bg_id, proj_size, adat_data) 
                   value = price_value,
                   showcase = bs_icon("shield"),
                   p(paste0("Reserved units only count toward the requirement if",
-                           " priced at or below the HUD affordable-for-sale limit",
-                           " for a ", ctx$home_type_label, "."))),
+                           " priced at or below the HUD ", ctx$home_type_label,
+                           " affordable-for-sale limit."))),
         value_box(title = "Housing Cost Burden",
                   value = paste0(ctx$cost_burden_pct,
                                  "% of households are housing cost-burdened"),
@@ -164,9 +166,41 @@ mod_affordability_ownership_server <- function(id, bg_id, proj_size, adat_data) 
       card(
         tagList(lapply(result$messages, p)),
         p("For more details about these results click below"),
-        actionButton(ns("next_sec"), "See details")
+        div(style = "display:flex; gap:8px; align-items:center;",
+            actionButton(ns("next_sec"), "See details"),
+            downloadButton(ns("download_pdf"), "Download PDF report"))
       )
     })
+
+    output$download_pdf <- downloadHandler(
+      filename = function() {
+        sprintf("dhna_assessment_ownership_%s.pdf",
+                format(Sys.time(), "%Y%m%d_%H%M%S"))
+      },
+      content = function(file) {
+        result <- recommendation_result()
+        validate(need(isTRUE(result$valid),
+                      "Submit a valid assessment before downloading the PDF."))
+        params <- build_report_params(
+          tenure         = "ownership",
+          location_label = location_label(),
+          bg_id          = bg_id(),
+          proj_size      = proj_size(),
+          inputs         = list(
+            program_name     = input$program_name,
+            home_type        = input$home_type,
+            assisted_units   = input$assisted_units,
+            reserved_units   = input$reserved_units,
+            reserved_price   = input$reserved_price,
+            eligibility_tags = input$eligibility_tags
+          ),
+          context  = result$context,
+          messages = result$messages
+        )
+        render_assessment_report(params, pdf_path = file)
+      },
+      contentType = "application/pdf"
+    )
 
     list(see_details = reactive(input$next_sec))
   })

@@ -71,7 +71,25 @@ optional_data <- list(
     num_col   = "SurveyCount",      # problematic-unit count (numerator)
     denom_col = "HousingUnits21"    # housing-unit base (denominator for rate)
   ),
-  assessor          = NULL
+  assessor          = NULL,
+  # Renthub: subscription-only (Dewey data partner), so optional for Goal #5
+  # (other cities). NULL = source unavailable; the pipeline skips rent-buffer
+  # production, bg_data has no rent_change_pct, rank_rents2 is NA, the Shiny
+  # app loads no quarterly rent series, and the classifier's appreciation-rent
+  # triggers degrade to FALSE for that input (other appreciation signals still
+  # contribute). Baseline / recent quarters: both post-2018 per the
+  # rental_coverage audit (Renthub had a permanent regime change Jun 2018 -
+  # Feb 2019; pre-2018 data is not comparable to post-2019 in completeness).
+  renthub           = list(
+    csv               = "rent_buffer.csv",     # under data/prepackaged/renthub/
+    baseline_year     = 2019,                  # post-gap baseline
+    baseline_quarter  = "Q3",
+    recent_year       = 2024,
+    recent_quarter    = "Q3",
+    date_floor_year   = 2018,                  # keep R_year > this in the long format
+    min_obs_per_q     = 30,                    # min observations per BG-quarter
+    min_quarters_long = 20                     # min quarters present per BG (long format)
+  )
 )
 
 # HUD AFFH-T release --------------------------------------------------------

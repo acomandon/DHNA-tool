@@ -16,12 +16,14 @@ server <- function(input, output, session) {
   aff_rental <- mod_affordability_rental_server("affordability_rental",
                                                 bg_id = loc$bg_id,
                                                 proj_size = loc$proj_size,
-                                                adat_data = adat_data)
+                                                adat_data = adat_data,
+                                                location_label = loc$location_label)
 
   aff_ownership <- mod_affordability_ownership_server("affordability_ownership",
                                                      bg_id = loc$bg_id,
                                                      proj_size = loc$proj_size,
-                                                     adat_data = adat_data)
+                                                     adat_data = adat_data,
+                                                     location_label = loc$location_label)
 
   mod_area_overview_server("area",
                            bg_id = loc$bg_id,

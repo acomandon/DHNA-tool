@@ -4,9 +4,10 @@
 # outputs.
 #
 # Args:
-#   bg_id      reactive returning the focal block group GISJOIN
-#   proj_size  reactive returning the proposed number of units
-#   adat_data  the risk database (one row per block group)
+#   bg_id           reactive returning the focal block group GISJOIN
+#   proj_size       reactive returning the proposed number of units
+#   adat_data       the risk database (one row per block group)
+#   location_label  reactive returning a friendly project location string for the PDF
 # Returns:
 #   list(see_details = reactive(input$next_sec))  drives the Area overview panel
 
@@ -48,7 +49,8 @@ mod_affordability_rental_ui <- function(id) {
   )
 }
 
-mod_affordability_rental_server <- function(id, bg_id, proj_size, adat_data) {
+mod_affordability_rental_server <- function(id, bg_id, proj_size, adat_data,
+                                            location_label = reactive("")) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -127,9 +129,38 @@ mod_affordability_rental_server <- function(id, bg_id, proj_size, adat_data) {
       card(
         tagList(lapply(result$messages, p)),
         p("For more details about this results click below"),
-        actionButton(ns("next_sec"), "See details")
+        div(style = "display:flex; gap:8px; align-items:center;",
+            actionButton(ns("next_sec"), "See details"),
+            downloadButton(ns("download_pdf"), "Download PDF report"))
       )
     })
+
+    output$download_pdf <- downloadHandler(
+      filename = function() {
+        sprintf("dhna_assessment_rental_%s.pdf",
+                format(Sys.time(), "%Y%m%d_%H%M%S"))
+      },
+      content = function(file) {
+        result <- recommendation_result()
+        validate(need(isTRUE(result$valid),
+                      "Submit a valid assessment before downloading the PDF."))
+        params <- build_report_params(
+          tenure         = "rental",
+          location_label = location_label(),
+          bg_id          = bg_id(),
+          proj_size      = proj_size(),
+          inputs         = list(
+            ami30 = input$affordable30, ami50 = input$affordable50,
+            ami60 = input$affordable60, ami70 = input$affordable70,
+            ami80 = input$affordable80
+          ),
+          context  = result$context,
+          messages = result$messages
+        )
+        render_assessment_report(params, pdf_path = file)
+      },
+      contentType = "application/pdf"
+    )
 
     list(see_details = reactive(input$next_sec))
   })

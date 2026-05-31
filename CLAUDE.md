@@ -61,7 +61,7 @@ These come pre-committed under `data/prepackaged/` and are Louisville-specific:
 - `Market_Areas/` — comprehensive plan market area shapefile
 - `affordable/` — affordable housing unit database (geocoded)
 - `permits/` — building permit records
-- `renthub/` — quarterly rent observations (Renthub)
+- `renthub/` — quarterly rent observations (Renthub). **Subscription-only via Dewey**, so it's wired as an optional locality-specific source via `optional_data$renthub` in `R/config.R` (set to `NULL` when unavailable; `05_buffer_data.R`, `06_tract_data.R`, and `DHNA/global.R` all degrade gracefully — `rank_rents2` becomes NA, the classifier's rent triggers don't fire, and the Shiny app loads without the quarterly series).
 - `hud/` — HUD AFFH data (zipped, unzipped inside `06_tract_data.R`)
 
 ## Shiny app structure (`DHNA/`)

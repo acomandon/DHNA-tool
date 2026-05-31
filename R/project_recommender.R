@@ -298,9 +298,9 @@ recommend_project_ownership <- function(risk_level, dominant_family, project_siz
 
   price_gate_msg <- if (reserved_units > 0 && !price_gate_passes) {
     paste0("The reserved-units price of ", fmt_money(reserved_price),
-           " exceeds the HUD affordable-for-sale limit of ", fmt_money(hud_max_price),
-           " for ", home_type_label, "s. These units are not counted as reserved",
-           " for the recommendation.")
+           " exceeds the HUD ", home_type_label, " affordable-for-sale limit of ",
+           fmt_money(hud_max_price),
+           ". These units are not counted as reserved for the recommendation.")
   } else NULL
 
   if (rl == "high") {

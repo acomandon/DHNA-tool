@@ -32,6 +32,7 @@ source("R/mod_location.R")
 source("R/mod_affordability_rental.R")
 source("R/mod_affordability_ownership.R")
 source("R/mod_area_overview.R")
+source("R/report_helpers.R")
 
 # Map click container (initial empty location) ------------------------------
 clicks <- data.frame(lat = NA, lng = NA)
@@ -42,7 +43,14 @@ pop_map <- pop %>%
   filter(data_yr == 2020) %>%
   select(GISJOIN_proj, pop)
 local_area <- read_csv("./data/local_area.csv")
-rent_buffer <- read_csv("./data/Renthub_quarterly_rent.csv")
+# Renthub is optional (paywalled; see optional_data$renthub in R/config.R).
+# Stage 05 only writes the file when configured; load it conditionally so
+# the app launches for cities without a Renthub subscription.
+rent_buffer <- if (file.exists("./data/Renthub_quarterly_rent.csv")) {
+  read_csv("./data/Renthub_quarterly_rent.csv")
+} else {
+  NULL
+}
 hh_micro <- read_csv("./data/hh_micro.csv")
 adat_data <- read_csv("./data/LVM_Risk_Database.csv")
 
