@@ -6,3 +6,9 @@
 
 # Dewey downloads (multi-GB parquet trees; never commit)
 data/dewey/
+
+# Regenerable Renthub intermediates from scripts/extract_renthub_ky.py +
+# scripts/build_rent_buffer.R (the 207 MB KY listings extract, the rebuilt
+# rent_buffer dry-run copy, and the coverage-audit outputs).
+data/processed/renthub_ky_listings.csv
+data/processed/audits/

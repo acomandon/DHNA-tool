@@ -84,7 +84,7 @@ optional_data <- list(
     csv               = "rent_buffer.csv",     # under data/prepackaged/renthub/
     baseline_year     = 2019,                  # post-gap baseline
     baseline_quarter  = "Q3",
-    recent_year       = 2024,
+    recent_year       = 2025,                  # Renthub is fresher than ACS; rebuilt 2026-07 pull covers through 2026
     recent_quarter    = "Q3",
     date_floor_year   = 2018,                  # keep R_year > this in the long format
     min_obs_per_q     = 30,                    # min observations per BG-quarter
