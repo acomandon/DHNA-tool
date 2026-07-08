@@ -24,6 +24,7 @@ for (d in c(
   here("data", "nhgis", "blockgroup", "bg2010"),
   here("data", "nhgis", "blockgroup", "bg2020"),
   here("data", "nhgis", "tract", "ct2020"),
+  here("data", "nhgis", "tract", "ct2010b"),
   here("data", "pums_usa", "acs_21_23"),
   here("data", "nhgis", "crosswalks"),
   here("data", "nhgis", "gis", "blockgroup", "bg2023"),
@@ -173,6 +174,24 @@ define_extract_nhgis(
   submit_extract() %>%
   wait_for_extract() %>%
   download_extract(download_dir = paste0(dl_path, "/ct2020"))
+
+# Goal #4 A2 — prior-vintage B25118 (Tenure by Household Income) for the
+# low-income-renter-share-change signal. B25118 is tract-minimum for
+# 2009-2013 (no block group), dataset acs_5yr_prior_b. The recent vintage
+# comes via ct2020_spec_B above (AVF6E cells); this is the 2010-vintage
+# counterpart (U26 cells), crosswalked to 2020 tracts in stage 06.
+dir.create(file.path(here("data", "nhgis", "tract", "ct2010b")),
+           recursive = TRUE)
+ct2010b_spec <- ds_spec(vintages$acs_5yr_prior_b,
+                        data_tables = "B25118",
+                        geog_levels = c("tract"))
+define_extract_nhgis(
+  description = "2009-2013 B25118 tenure-by-income (tract) for Kentucky",
+  datasets = ct2010b_spec,
+  geographic_extents = locality$state_nhgis_extent) %>%
+  submit_extract() %>%
+  wait_for_extract() %>%
+  download_extract(download_dir = paste0(dl_path, "/ct2010b"))
 
 
 # PUMS data ---------------------------------------------------------------

@@ -153,6 +153,68 @@ rent_fmi20_ct  <- rent_income20_ct %>%
             renters80_ct = renter_adj(name, value, HUD_FMI$MFI_80)) %>%
   rename(GISJOIN_CT = GISJOIN)
 
+# Goal #4 A2 — low-income-renter-share change (direct displacement signal).
+# The share of the rental stock that is low-income, 2010 -> 2020. A decline
+# is displacement observed (the vulnerable population left), distinct from the
+# price-appreciation signals. Low-income is CPI-aligned bracket cuts: 2010
+# <$25k, 2020 <$35k (~1.31x, matching params$cpi_prior_to_recent). B25118 is
+# tract-only, so this is tract-level and assigned to BGs via local_area_ct
+# below, summing counts and computing the rate post-summarise (like cost
+# burden). 2010 tracts are moved onto 2020 tracts with a renter-weighted
+# crosswalk built from the bg2010->bg2020 NHGIS crosswalk (wt_renthu), which
+# handles splits/merges/redraws and GEOID-reuse uniformly. See
+# scripts/exploratory/{verify_tract_crosswalk,build_lir_crosswalk}.R.
+
+# Recent (2020) low-income renters (<$35k) + total renters per tract.
+lir20_ct <- rent_income20_ct %>%
+  group_by(GISJOIN) %>%
+  summarise(renters_20_b = sum(value, na.rm = TRUE),
+            lir_lo_20 = sum(value[name %in% c("renters_5000", "renters_9999",
+                          "renters_14999", "renters_19999", "renters_24999",
+                          "renters_34999")], na.rm = TRUE),
+            .groups = "drop") %>%
+  rename(GISJOIN_CT = GISJOIN)
+
+# Prior (2010) low-income-renter SHARE per 2010 tract (<$25k; U26 cells).
+prior_b25118 <- read_nhgis(list.files(here("data", "nhgis", "tract", "ct2010b"),
+                                      pattern = "csv.zip$", full.names = TRUE)) %>%
+  filter(STATE == locality$state_name, COUNTY == locality$county_name)
+lir10_share <- prior_b25118 %>%
+  transmute(t2010_gj = GISJOIN,
+            share_10 = if_else(U26E014 > 0,
+                       (U26E015 + U26E016 + U26E017 + U26E018 + U26E019) / U26E014,
+                       NA_real_))
+
+# Renter-weighted 2010->2020 tract crosswalk: aggregate the bg2010->bg2020
+# crosswalk (wt_renthu, the same weight stage 01 uses) to tract pairs,
+# weighting by 2010 BG renter counts (UL8E001 from the bg2010 extract).
+xw_bg <- read_nhgis(list.files(here("data", "nhgis", "crosswalks"),
+                    pattern = "nhgis_bg2010_bg2020", full.names = TRUE))
+bg2010_renters <- read_nhgis(list.files(here("data", "nhgis", "blockgroup", "bg2010"),
+                             pattern = "csv.zip$", full.names = TRUE)) %>%
+  transmute(bg2010gj = GISJOIN, r_bg = UL8E001)
+renter_flow_ct <- xw_bg %>%
+  left_join(bg2010_renters, by = "bg2010gj") %>%
+  mutate(t2010_gj = str_sub(bg2010gj, end = -2),
+         t2020_gj = str_sub(bg2020gj, end = -2),
+         flow = coalesce(r_bg, 0) * wt_renthu) %>%
+  filter(flow > 0) %>%
+  group_by(t2010_gj, t2020_gj) %>%
+  summarise(flow = sum(flow, na.rm = TRUE), .groups = "drop")
+
+# Move the 2010 share onto 2020 tracts as a renter-flow-weighted average,
+# expressed as counts (share x renters) so the local-area summation below
+# aggregates them correctly before the rate is taken.
+lir10_ct <- renter_flow_ct %>%
+  left_join(lir10_share, by = "t2010_gj") %>%
+  filter(!is.na(share_10)) %>%
+  group_by(t2020_gj) %>%
+  summarise(renters_10_cw = sum(flow),
+            lir_lo_10_cw  = sum(share_10 * flow), .groups = "drop") %>%
+  rename(GISJOIN_CT = t2020_gj)
+
+lir_ct <- full_join(lir20_ct, lir10_ct, by = "GISJOIN_CT")
+
 # Create local area units for joining between BG and CT
 local_area_ct <- local_area %>%
   group_by(GISJOIN_proj, GISJOIN_CT) %>%
@@ -166,6 +228,7 @@ ct_data <- local_area_ct %>%
   left_join(., rent_fmi20_ct) %>%
   left_join(., hmda_tract) %>%
   left_join(., cyclomedia_tract) %>%
+  left_join(., lir_ct) %>%
   group_by(GISJOIN_proj) %>%
   summarise(across(where(is.double), ~sum(.x, na.rm = TRUE))) %>%
   mutate(cost_burden30_20_p = cost_burden30_20_ct/burden_HH_20_ct,
@@ -186,7 +249,13 @@ ct_data <- local_area_ct %>%
          # required — the cells are already in ct2020.
          owner_costburden_p = if_else(owner_20_ct > 0,
                                       own_burden30_20_ct / owner_20_ct,
-                                      NA_real_))
+                                      NA_real_),
+         # Goal #4 A2 — local-area low-income-renter shares (num/denom summed
+         # across the BG's local-area tracts, then rate). lir_loss > 0 = the
+         # low-income share of renters fell = displacement observed.
+         lir_share_10 = if_else(renters_10_cw > 0, lir_lo_10_cw / renters_10_cw, NA_real_),
+         lir_share_20 = if_else(renters_20_b  > 0, lir_lo_20   / renters_20_b,  NA_real_),
+         lir_loss     = lir_share_10 - lir_share_20)
 
 # Join BG data and create rank variables for risk assessment
 
@@ -251,7 +320,13 @@ bg_ct_data <- BGxCT %>%
          rank_owner_costburden = rank(owner_costburden_p, na.last = "keep"),
          rank_owner_costburden = ceiling(rank_owner_costburden/max(rank_owner_costburden, na.rm = T)*100),
          rank_owner_longtenure = rank(owner_longtenure_p, na.last = "keep"),
-         rank_owner_longtenure = ceiling(rank_owner_longtenure/max(rank_owner_longtenure, na.rm = T)*100))
+         rank_owner_longtenure = ceiling(rank_owner_longtenure/max(rank_owner_longtenure, na.rm = T)*100),
+         # Goal #4 A2 — displacement-observed rank (high = biggest loss of
+         # low-income renters). Drives the renter distress track: top quintile
+         # -> advanced displacement -> medium; middle band -> nascent ->
+         # high-tier corroborator (see R/risk_matrix.R).
+         rank_lir_loss = rank(lir_loss, na.last = "keep"),
+         rank_lir_loss = ceiling(rank_lir_loss/max(rank_lir_loss, na.rm = T)*100))
 
 # Validation ---------------------------------------------------------------
 validation_banner("Stage 06 — tract data & ranks")
@@ -271,7 +346,9 @@ rank_cols <- c("rank_renter_p", "rank_housing_tight", "rank_hh_growth",
                "rank_mls_growth", "rank_foreclosure",
                "rank_hmda_denial", "rank_cyclomedia",
                # Phase 4.2b.3 — owner-vulnerability ranks.
-               "rank_owner_costburden", "rank_owner_longtenure")
+               "rank_owner_costburden", "rank_owner_longtenure",
+               # Goal #4 A2 — low-income-renter-loss (displacement observed).
+               "rank_lir_loss")
 # rank_rents2 is sourced from Renthub (optional). Only check when configured.
 if (!is.null(optional_data$renthub)) rank_cols <- c(rank_cols, "rank_rents2")
 for (rc in rank_cols) check_not_all_na(bg_ct_data, rc, severity = "error")

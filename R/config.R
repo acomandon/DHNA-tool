@@ -21,6 +21,7 @@ vintages <- list(
   acs_5yr_recent   = "2020_2024_ACS5a",
   acs_5yr_recent_b = "2020_2024_ACS5b",
   acs_5yr_prior    = "2009_2013_ACS5a",
+  acs_5yr_prior_b  = "2009_2013_ACS5b",   # B25118 tenure-by-income (A2 prior; tract-only)
   decennial_2000   = "2000_SF1b",
   decennial_1990   = "1990_STF1",
   pums_samples     = c("us2022a", "us2023a", "us2024a"),

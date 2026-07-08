@@ -186,6 +186,23 @@ risk_matrix <- list(
               list(input = "median_rent_20",  threshold_ref = "med_rent_20_threshold",  direction = "above")
             ))
           ))
+        ),
+
+        # Goal #4 A2 — advanced displacement observed. Top-quintile loss of
+        # low-income renters is direct evidence the vulnerable population has
+        # already largely left = post-transition = medium (per the stage
+        # mapping; the HNA classifies the 076 area medium). Deliberately has
+        # NO appreciation or pop-growth gate, so it catches thinning/displacing
+        # BGs the price signals miss (e.g. a core BG whose pooled rent is
+        # diluted over the high-tier threshold by a wealthy edge). Medium
+        # overrides high, so this correctly supersedes any early-stage flag.
+        m3 = list(
+          description = "Advanced displacement observed — top-quintile loss of low-income renters (renter distress track, ungated)",
+          triggers = list(
+            lir_advanced = list(family = "distress",
+              condition = list(input = "rank_lir_loss", threshold_ref = "q4_cutoff", direction = "above"))
+          ),
+          combiner = "any"
         )
       ),
 
@@ -222,7 +239,13 @@ risk_matrix <- list(
               condition = list(combiner = "all", conditions = list(
                 list(input = "black_change10_20",  threshold_ref = "black_change_abs_h",   direction = "below"),
                 list(input = "blackpct_ch_00_20",  threshold_ref = "black_change_pct_max", direction = "below")
-              )))
+              ))),
+            # Goal #4 A2 — nascent displacement (middle-band low-income-renter
+            # loss) as an early-warning indicator: combined with >=1 other
+            # composite signal it lifts a still-affordable BG to high.
+            lir_nascent = list(family = "distress",
+              condition = list(input = "rank_lir_loss",
+                threshold_ref = list(low = "upper_half", high = "q4_cutoff"), direction = "between"))
           ),
           combiner = "count_ge",
           count_threshold_ref = "composite_min_count",
