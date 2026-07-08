@@ -60,6 +60,26 @@ two_year_bar <- function(v10, v20, ylab) {
     as.character(t))
 }
 
+# Confidence callout — shared by the affordability results pages (concise)
+# and the Area overview (detailed). Returns NULL unless the BG is flagged
+# low-confidence (heterogeneous local area; see stage 06 area_confidence).
+.confidence_note <- function(area_confidence, detailed = FALSE) {
+  conf <- if (length(area_confidence) && !is.na(area_confidence)) as.character(area_confidence) else NA
+  if (is.na(conf) || conf != "low") return(NULL)
+  body <- if (detailed) {
+    tagList(strong("Local knowledge advised. "),
+      "This area's classification draws on a heterogeneous local area — the data ",
+      "confidently shows a sub-area that differs from the overall reading (a vulnerable ",
+      "pocket, or ordinary within-neighborhood variation). Interpret alongside local knowledge.")
+  } else {
+    tagList(strong("Local knowledge advised. "),
+      "This area's data is heterogeneous — a local sub-area may differ from this reading. ",
+      "See the Area overview for detail.")
+  }
+  div(style = "margin-top: 10px; padding: 10px 12px; border-left: 4px solid #C6AA86;
+               background: rgba(198,170,134,0.12); font-size: 0.95em;", body)
+}
+
 # Rank-line text: describes where a rank sits relative to the classifier's
 # reference points. `direction = "above"` (default) treats the band as
 # "rank above threshold"; `direction = "below"` inverts the test for
@@ -222,11 +242,17 @@ mod_area_overview_server <- function(id, bg_id, tenure, adat_data, pop,
       tier_stmt <- tryCatch(.tier_statement(tkey, tier), error = function(e) NULL)
       fam_stmt  <- tryCatch(.family_emphasis(tkey, tier, fam), error = function(e) NULL)
 
+      # Confidence note — detailed version, surfaced only for the "low" tier.
+      conf_note <- .confidence_note(
+        if ("area_confidence" %in% names(a)) a$area_confidence else NA,
+        detailed = TRUE)
+
       tagList(
         h4(paste0(.tier_display(tier), " — ", .tenure_display(tenure()))),
         h5(paste0("Leading driver: ", .family_display(fam))),
         if (!is.null(tier_stmt)) p(tier_stmt) else NULL,
-        if (!is.null(fam_stmt))  p(fam_stmt)  else NULL
+        if (!is.null(fam_stmt))  p(fam_stmt)  else NULL,
+        conf_note
       )
     })
 

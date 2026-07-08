@@ -328,8 +328,51 @@ bg_ct_data <- BGxCT %>%
          rank_lir_loss = rank(lir_loss, na.last = "keep"),
          rank_lir_loss = ceiling(rank_lir_loss/max(rank_lir_loss, na.rm = T)*100))
 
+# Area confidence flag (C-thread) — transparency, NOT an override. Compares
+# each BG's OWN low-income-household share (+ its ACS margin of error) to the
+# local-area-pooled share the classifier uses. When the focal BG confidently
+# differs from its pool (heterogeneity gap beyond the MOE), the pooled reading
+# may average away a real sub-area (a vulnerable pocket, or within-class
+# variation) — flag "low" so planners apply local knowledge; the classifier
+# itself still uses the pooled (dominant-landscape) value. Uses the AURTM*
+# MOE cells the estimate-only pipeline otherwise drops (re-read here, same
+# self-contained pattern as the A2 crosswalk). Low-income = <$35k (AURTE/
+# AURTM 002:007), matching the pooled lo_inc definition.
+bg_own_lir <- read_nhgis(list.files(here("data", "nhgis", "blockgroup", "bg2020"),
+                         pattern = "csv.zip$", full.names = TRUE)) %>%
+  filter(STATE == locality$state_name, COUNTY == locality$county_name) %>%
+  transmute(GISJOIN_proj = GISJOIN,
+            HH_own    = AURTE001,
+            lo_own    = AURTE002 + AURTE003 + AURTE004 + AURTE005 + AURTE006 + AURTE007,
+            own_share = if_else(HH_own > 0, lo_own / HH_own, NA_real_),
+            moe_lo    = sqrt(AURTM002^2 + AURTM003^2 + AURTM004^2 +
+                             AURTM005^2 + AURTM006^2 + AURTM007^2),
+            moe_HH    = AURTM001) %>%
+  mutate(rad = moe_lo^2 - (own_share^2) * (moe_HH^2),          # ACS proportion MOE
+         moe_share = if_else(HH_own > 0,
+                     (1/HH_own) * sqrt(if_else(rad >= 0, rad,
+                                       moe_lo^2 + (own_share^2) * (moe_HH^2))),
+                     NA_real_)) %>%
+  select(GISJOIN_proj, own_lo_share = own_share, own_lo_moe = moe_share)
+
+bg_ct_data <- bg_ct_data %>%
+  left_join(bg_own_lir, by = "GISJOIN_proj") %>%
+  mutate(pool_lo_share = if_else(HH_20 > 0, lo_inc_hh_20 / HH_20, NA_real_),
+         het_gap_pp = abs(own_lo_share - pool_lo_share) * 100,
+         area_confidence = case_when(
+           is.na(het_gap_pp) | is.na(own_lo_moe)          ~ "moderate",
+           het_gap_pp < 5                                 ~ "high",
+           het_gap_pp >= 5 & het_gap_pp > own_lo_moe * 100 ~ "low",
+           TRUE                                           ~ "moderate"),
+         area_confidence = factor(area_confidence, levels = c("high", "moderate", "low")))
+
 # Validation ---------------------------------------------------------------
 validation_banner("Stage 06 — tract data & ranks")
+dhna_check(dplyr::n_distinct(bg_ct_data$area_confidence) > 1,
+           "area_confidence not degenerate",
+           sprintf("%d BGs flagged low-confidence",
+                   sum(bg_ct_data$area_confidence == "low", na.rm = TRUE)),
+           severity = "warn")
 # CT-level burden joined onto BGs; low coverage means the BG<->CT join broke.
 check_na_share(bg_ct_data, "cost_burden30_20_p", 0.8, "warn")
 # Phase 4.2b.1 — new tract-level inputs (HMDA tract IDs match 2020 vintage;

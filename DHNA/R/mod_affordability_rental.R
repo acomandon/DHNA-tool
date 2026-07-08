@@ -127,6 +127,7 @@ mod_affordability_rental_server <- function(id, bg_id, proj_size, adat_data,
       if (!result$valid) return(p(result$error))
 
       card(
+        .confidence_note(if ("area_confidence" %in% names(area())) area()$area_confidence else NA),
         tagList(lapply(result$messages, p)),
         p("For more details about this results click below"),
         div(style = "display:flex; gap:8px; align-items:center;",
